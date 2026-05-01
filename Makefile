@@ -11,8 +11,8 @@ venv:
 
 # Style
 style:
-	uv run black ./${MAIN_FOLDER}/
-	uv run flake8 ./${MAIN_FOLDER}/
+	uv run black ./${MAIN_FOLDER}/ ./${TEST_FOLDER}/
+	uv run flake8 ./${MAIN_FOLDER}/ ./${TEST_FOLDER}/
 	uv run isort -rc ./${MAIN_FOLDER}/
 
 test:
