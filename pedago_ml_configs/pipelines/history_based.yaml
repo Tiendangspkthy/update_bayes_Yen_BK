@@ -1,0 +1,19 @@
+interaction_data_path: "data/full_data.csv"
+item_data_path: "data/item_specification.csv"
+
+user_id: "StudentID"
+item_id: "QuestionID"
+target: "Result"
+
+item_features:
+  - name: "Level"
+    type: "categorical"
+  - name: "Topic"
+    type: "categorical"
+
+splitter:
+  train_ratio: 0.7
+  val_ratio: 0.2
+  test_ratio: 0.1
+
+smoothing: 5
