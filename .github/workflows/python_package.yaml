@@ -1,0 +1,90 @@
+name: Pedago ML Python Package
+
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.11]
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      - name: Check line count
+        run: |
+          echo "Checking lines of code in each file"
+          MAX_LINES=1000
+          for file in $(git ls-files | grep -v '^tests/'); do
+            if [[ "$file" != *".pylintrc"* ]] && [[ "$file" != *"airflow.cfg"* ]]; then
+              line_count=$(wc -l < "$file")
+              if [ "$line_count" -gt "$MAX_LINES" ]; then
+                echo "::error file=$file::File $file has $line_count lines, which exceeds the threshold of $MAX_LINES lines."
+                exit 1  # Exit if any file exceeds the line limit
+              fi
+            fi
+          done
+      - name: Check lines of code changes
+        run: |
+            MAX_CHANGE_LINES=1000
+            # Ensure full clone is fetched
+            git fetch origin main
+
+            # Get the latest commit on origin/main before the push
+            LAST_MAIN_COMMIT=$(git rev-parse origin/main)
+
+            # Get the latest commit on the current branch (might be main or a feature branch)
+            CURRENT_COMMIT=$(git rev-parse HEAD)
+
+            # If the commits are the same, this means we're pushing directly to main
+            if [ "$LAST_MAIN_COMMIT" = "$CURRENT_COMMIT" ]; then
+              echo "Direct push to main detected. Comparing the last commit on main with the previous commit."
+              DIFF_RANGE="HEAD^1..HEAD"
+            else
+              # Comparing changes between the feature branch and main
+              echo "Feature branch push detected. Comparing origin/main with current branch."
+              DIFF_RANGE="origin/main..HEAD"
+            fi
+
+            # Calculate changes (added + deleted lines)
+            CHANGES=$(git diff --numstat "$DIFF_RANGE" | awk '{added+=$1; deleted+=$2} END {print added+deleted}')
+
+            # Check for change limit
+            if [ -n "$CHANGES" ] && [ "$CHANGES" -gt "$MAX_CHANGE_LINES" ]; then
+              echo "::error::Too many changes: $CHANGES lines. Maximum allowed: $MAX_CHANGE_LINES lines."
+              exit 1
+            else
+              echo "Number of changed lines: $CHANGES"
+            fi
+      - name: Create virtual environment
+        run: uv venv --python ${{ matrix.python-version }}
+      - name: Cache uv dependencies
+        id: cache-uv
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('setup.py') }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-uv-${{ hashFiles('setup.py') }}
+      - name: Install dependencies
+        run: uv pip install -e ".[dev]"
+      - name: Make test
+        run: |
+          uv run flake8 ./pedago_ml/
+          uv run mypy ./pedago_ml/
+          uv run pytest -s --durations=0 tests/
+          uv run pylint ./pedago_ml/
