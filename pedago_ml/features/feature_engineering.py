@@ -8,13 +8,6 @@ from pedago_ml.utils.logger import logger
 class FeatureEngineer:
     """
     Build leakage-safe aggregate features for history-based adaptive question selection.
-
-    Dataset assumption:
-    - Fixed research dataset.
-    - Each student answers the same 30 items.
-    - Splitter creates observed-history train, validation and test hidden set
-      per student.
-
     Feature design:
     - Train: use leave-one-out student/item aggregates to avoid target leakage.
     - Val/Test: use full-train aggregates only.
@@ -285,25 +278,7 @@ class FeatureEngineer:
         val_df: pd.DataFrame,
         test_df: pd.DataFrame,
     ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        """
-        Run leakage-safe feature engineering.
-
-        Returns:
-            train_out:
-                Train data with leave-one-out aggregate features.
-
-            val_out:
-                Validation hidden data with full-train aggregate features.
-
-            test_out:
-                Test hidden data with full-train aggregate features.
-
-            student_feature_table:
-                Full-train student aggregate feature table.
-
-            item_feature_table:
-                Full-train item aggregate feature table.
-        """
+        """Run leakage-safe feature engineering."""
         logger.info("Building leakage-safe aggregate features...")
 
         self._validate_inputs(train_df, val_df, test_df)
