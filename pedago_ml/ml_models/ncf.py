@@ -525,6 +525,6 @@ if __name__ == "__main__":
     model_config = NCFModelConfig.load_config("pedago_ml_configs/ml_models/ncf.yaml")
     model = NCFModel(model_config)
     model.fit(train_features, val_features)
-    model.save("ncf_model.pth")
-    model = NCFModel.load("ncf_model.pth", model_config)
+    model.save("outputs/ncf_model.pth")
+    model = NCFModel.load("outputs/ncf_model.pth", model_config)
     model.predict(test_features)
