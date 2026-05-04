@@ -60,6 +60,53 @@ class SplitterConfig(BaseModel):
     test_ratio: float
 
 
+class XGBParamsConfig(BaseModel):
+    """XGBoost hyperparameters."""
+
+    n_estimators: int = 300
+    max_depth: int = 3
+    learning_rate: float = 0.05
+    subsample: float = 0.9
+    colsample_bytree: float = 0.9
+    min_child_weight: float = 1.0
+    reg_alpha: float = 0.0
+    reg_lambda: float = 1.0
+    objective: str = "binary:logistic"
+    eval_metric: str = "logloss"
+    tree_method: str = "hist"
+    random_state: int = 12
+    n_jobs: int = -1
+
+
+class XGBOutputConfig(BaseModel):
+    """XGBoost output columns and artifact path."""
+
+    score_col: str = "xgb_pred_proba"
+    prediction_col: str = "xgb_pred"
+    rank_col: str = "xgb_rank"
+
+
+class XGBModelConfig(BaseConfig):
+    model_name: str = "xgb"
+
+    user_id: str = "StudentID"
+    item_id: str = "QuestionID"
+    target_col: str = "Result"
+
+    threshold: float = 0.5
+    feature_columns: Optional[list[str]] = None
+
+    model_params: XGBParamsConfig = XGBParamsConfig()
+    output: XGBOutputConfig = XGBOutputConfig()
+
+    @classmethod
+    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
+        data = resolve_dict(data)
+        instance = cls(**data)
+        instance.load_from_env()
+        return instance
+
+
 class BasePipelineConfig(BaseConfig):
     interaction_data_path: str
     item_data_path: str
