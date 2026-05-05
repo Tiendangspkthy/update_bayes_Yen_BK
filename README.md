@@ -249,17 +249,7 @@ pedago_ml/
 └── scoring.py                # Scoring components
 
 pedago_ml_configs/
-├── edu_theory/
-│   ├── zpd.yaml              # zone of proximal configuration
-│   └── flow_theory.yaml      # flow theory configuration
-├── ml_models/
-│   ├── xgb.yaml              # xgboost configuration
-│   ├── ncf.yaml              # neural collaborative filtering
-│   └── knowledge_tracing.yaml  # knowledge tracing configuration
-├── psychometrics/
-│   ├── rasch.yaml            # rasch model configuration
-│   └── posterior.yaml        # posterior updater configuration
-├── pipelines/
-│   ├── history_based.yaml    # History based pipeline configuration
-│   └── cold_start.yaml       # cold-start pipeline configuration
+├── history_based.yaml    # History based pipeline configuration
+├── cold_start.yaml       # cold-start pipeline configuration
+│
 ```

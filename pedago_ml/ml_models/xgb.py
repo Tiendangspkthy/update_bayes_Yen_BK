@@ -9,7 +9,7 @@ from xgboost import XGBClassifier
 from pedago_ml.features.dataloader import DataLoader
 from pedago_ml.features.feature_engineering import FeatureEngineer
 from pedago_ml.features.splitter import DataSplitter
-from pedago_ml.utils.config import BasePipelineConfig, XGBModelConfig
+from pedago_ml.utils.config import HistoryBasedPipelineConfig, XGBModelConfig
 
 
 class XGBModel:
@@ -122,8 +122,8 @@ class XGBModel:
 
 
 if __name__ == "__main__":
-    pipeline_config = BasePipelineConfig.load_config(
-        "pedago_ml_configs/pipelines/history_based.yaml"
+    pipeline_config = HistoryBasedPipelineConfig.load_config(
+        "pedago_ml_configs/history_based.yaml"
     )
     data = DataLoader(config=pipeline_config).run()
     splitter = DataSplitter(config=pipeline_config)
@@ -141,7 +141,7 @@ if __name__ == "__main__":
         test_df=test_df,
     )
 
-    model_config = XGBModelConfig.load_config("pedago_ml_configs/ml_models/xgb.yaml")
+    model_config = pipeline_config.xgb_config
     model = XGBModel(config=model_config)
     model.fit(train_features)
 

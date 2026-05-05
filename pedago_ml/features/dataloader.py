@@ -115,7 +115,7 @@ class DataLoader:
 
 if __name__ == "__main__":
     pipeline_config = BasePipelineConfig.load_config(
-        "pedago_ml_configs/pipelines/history_based.yaml"
+        "pedago_ml_configs/history_based.yaml"
     )
     data = DataLoader(config=pipeline_config).run()
     print(data.head())

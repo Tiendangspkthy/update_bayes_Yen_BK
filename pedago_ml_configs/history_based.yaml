@@ -1,0 +1,74 @@
+interaction_data_path: "data/full_data.csv"
+item_data_path: "data/item_specification.csv"
+
+user_id: "StudentID"
+item_id: "QuestionID"
+target: "Result"
+
+item_features:
+  - name: "Level"
+    type: "categorical"
+  - name: "Topic"
+    type: "categorical"
+
+splitter:
+  train_ratio: 0.7
+  val_ratio: 0.2
+  test_ratio: 0.1
+
+smoothing: 5
+
+xgb_config:
+  model_name: xgb
+
+  threshold: 0.5
+  feature_columns: null
+
+  model_params:
+    objective: binary:logistic
+    eval_metric: logloss
+    tree_method: hist
+    n_estimators: 200
+    learning_rate: 0.05
+    max_depth: 3
+    min_child_weight: 5.0
+    subsample: 0.9
+    colsample_bytree: 0.9
+    reg_lambda: 1.0
+    random_state: 12
+    n_jobs: -1
+
+  output:
+    score_col: xgb_pred_proba
+    prediction_col: xgb_pred
+    rank_col: xgb_rank
+
+ncf_config:
+  model_name: ncf
+
+  threshold: 0.5
+
+  feature_columns:
+    - student_n_correct
+    - student_accuracy
+    - item_n_correct
+    - item_n_attempts
+    - item_accuracy
+
+  model_params:
+    embedding_dim: 16
+    hidden_dims: [64, 32]
+    dropout: 0.10
+    learning_rate: 0.001
+    weight_decay: 0.00001
+    batch_size: 512
+    epochs: 50
+    early_stopping_patience: 7
+    log_every_n_epochs: 5
+    random_state: 12
+    device: auto
+
+  output:
+    score_col: ncf_pred_proba
+    prediction_col: ncf_pred
+    rank_col: ncf_rank

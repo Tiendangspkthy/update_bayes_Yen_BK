@@ -4,14 +4,14 @@ from conftest import BaseTest
 from pedago_ml.features.dataloader import DataLoader
 from pedago_ml.features.feature_engineering import FeatureEngineer
 from pedago_ml.features.splitter import DataSplitter
-from pedago_ml.utils.config import BasePipelineConfig
+from pedago_ml.utils.config import HistoryBasedPipelineConfig
 
 
 class TestPipeline(BaseTest):
     @pytest.mark.order("last")
     def test_pipeline(self):
-        config = BasePipelineConfig.load_config(
-            "pedago_ml_configs/pipelines/history_based.yaml"
+        config = HistoryBasedPipelineConfig.load_config(
+            "pedago_ml_configs/history_based.yaml"
         )
 
         data = DataLoader(config=config).run()
