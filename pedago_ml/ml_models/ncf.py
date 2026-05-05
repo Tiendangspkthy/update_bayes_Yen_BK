@@ -11,6 +11,7 @@ from sklearn.metrics import accuracy_score, log_loss, roc_auc_score
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
+from pedago_ml.base.ml_model import BaseMLModel
 from pedago_ml.features.dataloader import DataLoader as DataLoaderFeature
 from pedago_ml.features.feature_engineering import FeatureEngineer
 from pedago_ml.features.splitter import DataSplitter
@@ -111,17 +112,13 @@ class NCFNetwork(nn.Module):
         return self.mlp(x).squeeze(1)
 
 
-class NCFModel:
+class NCFModel(BaseMLModel):
     """Trainable NCF wrapper for history-based adaptive question selection."""
 
     def __init__(
         self, config: HistoryBasedPipelineConfig, model_config: NCFModelConfig
     ) -> None:
-        self.config = config
-        self.model_config = model_config
-        self.user_col = self.config.user_id
-        self.item_col = self.config.item_id
-        self.target_col = self.config.target
+        super().__init__(config=config, model_config=model_config)
 
         self.user_to_idx: dict[Any, int] = {}
         self.item_to_idx: dict[Any, int] = {}
@@ -421,16 +418,11 @@ class NCFModel:
 
     def predict(self, df: pd.DataFrame) -> np.ndarray:
         """Predict binary correctness label."""
-        proba = self.predict_proba(df)
-        return (proba >= self.model_config.threshold).astype(np.int64)
+        return super().predict(df)
 
     def add_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Return dataframe with probability, binary prediction, and per-user rank."""
-        out = df.copy()
-        out[self.model_config.output.score_col] = self.predict_proba(out)
-        out[self.model_config.output.prediction_col] = (
-            out[self.model_config.output.score_col] >= self.model_config.threshold
-        ).astype(int)
+        out = super().add_predictions(df)
         out[self.model_config.output.rank_col] = out.groupby(self.user_col)[
             self.model_config.output.score_col
         ].rank(method="first", ascending=False)

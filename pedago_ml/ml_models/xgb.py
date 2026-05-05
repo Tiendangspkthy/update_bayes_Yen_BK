@@ -6,20 +6,21 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score, log_loss, roc_auc_score
 from xgboost import XGBClassifier
 
+from pedago_ml.base.ml_model import BaseMLModel
 from pedago_ml.features.dataloader import DataLoader
 from pedago_ml.features.feature_engineering import FeatureEngineer
 from pedago_ml.features.splitter import DataSplitter
 from pedago_ml.utils.config import HistoryBasedPipelineConfig, XGBModelConfig
+from pedago_ml.utils.logger import logger
 
 
-class XGBModel:
+class XGBModel(BaseMLModel):
     """Simple XGBoost baseline for history-based question recommendation."""
 
     def __init__(
         self, config: HistoryBasedPipelineConfig, model_config: XGBModelConfig
     ):
-        self.config = config
-        self.model_config = model_config
+        super().__init__(config=config, model_config=model_config)
         self.feature_columns: list[str] = []
         self.model = XGBClassifier(**model_config.model_params.model_dump())
 
@@ -28,9 +29,9 @@ class XGBModel:
             return self.model_config.feature_columns
 
         exclude_cols = {
-            self.config.user_id,
-            self.config.item_id,
-            self.config.target,
+            self.user_col,
+            self.item_col,
+            self.target_col,
             self.model_config.output.score_col,
             self.model_config.output.prediction_col,
             self.model_config.output.rank_col,
@@ -60,10 +61,10 @@ class XGBModel:
         )
 
     def _make_y(self, df: pd.DataFrame) -> np.ndarray:
-        if self.config.target not in df.columns:
-            raise ValueError(f"Missing target column: {self.config.target}")
+        if self.target_col not in df.columns:
+            raise ValueError(f"Missing target column: {self.target_col}")
 
-        return df[self.config.target].astype(int).to_numpy()
+        return df[self.target_col].astype(int).to_numpy()
 
     def fit(self, train_df: pd.DataFrame) -> "XGBModel":
         self.feature_columns = self._select_features(train_df)
@@ -76,30 +77,10 @@ class XGBModel:
 
         return self.model.predict_proba(self._make_x(df))[:, 1]
 
-    def predict(self, df: pd.DataFrame) -> np.ndarray:
-        return (self.predict_proba(df) >= self.model_config.threshold).astype(int)
-
-    def add_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
-        out = df.copy()
-        out[self.model_config.output.score_col] = self.predict_proba(out)
-        out[self.model_config.output.prediction_col] = self.predict(out)
-        return out
-
-    def rank_candidates(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Rank hidden candidate questions inside each student pool."""
-        out = self.add_predictions(df)
-        out[self.model_config.output.rank_col] = out.groupby(self.config.user_id)[
-            self.model_config.output.score_col
-        ].rank(ascending=False, method="first")
-
-        return out.sort_values(
-            [self.config.user_id, self.model_config.output.rank_col]
-        ).reset_index(drop=True)
-
     def evaluate(self, df: pd.DataFrame) -> dict[str, float]:
         y_true = self._make_y(df)
         y_score = self.predict_proba(df)
-        y_pred = (y_score >= self.model_config.threshold).astype(int)
+        y_pred = (y_score >= self.threshold).astype(int)
 
         metrics = {
             "logloss": float(log_loss(y_true, y_score, labels=[0, 1])),
@@ -112,6 +93,11 @@ class XGBModel:
             if len(np.unique(y_true)) == 2
             else float("nan")
         )
+
+        logger.info("=" * 20 + " XGB METRICS " + "=" * 20)
+        for key, val in metrics.items():
+            logger.info("{:<20}: {}".format(key, val))
+
         return metrics
 
     def save(self, path: str | Path) -> None:
