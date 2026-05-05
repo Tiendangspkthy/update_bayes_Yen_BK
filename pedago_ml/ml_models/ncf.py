@@ -114,11 +114,14 @@ class NCFNetwork(nn.Module):
 class NCFModel:
     """Trainable NCF wrapper for history-based adaptive question selection."""
 
-    def __init__(self, config: NCFModelConfig) -> None:
+    def __init__(
+        self, config: HistoryBasedPipelineConfig, model_config: NCFModelConfig
+    ) -> None:
         self.config = config
-        self.user_col = config.user_id
-        self.item_col = config.item_id
-        self.target_col = config.target_col
+        self.model_config = model_config
+        self.user_col = self.config.user_id
+        self.item_col = self.config.item_id
+        self.target_col = self.config.target
 
         self.user_to_idx: dict[Any, int] = {}
         self.item_to_idx: dict[Any, int] = {}
@@ -131,15 +134,15 @@ class NCFModel:
         self.device = self._resolve_device()
 
     def _resolve_device(self) -> torch.device:
-        if self.config.model_params.device == "auto":
+        if self.model_config.model_params.device == "auto":
             device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
-            device = self.config.model_params.device
+            device = self.model_config.model_params.device
 
         return torch.device(device)
 
     def _set_seed(self) -> None:
-        seed = self.config.model_params.random_state
+        seed = self.model_config.model_params.random_state
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
@@ -160,17 +163,17 @@ class NCFModel:
             )
 
     def _resolve_feature_columns(self, train_df: pd.DataFrame) -> list[str]:
-        if self.config.feature_columns is not None:
+        if self.model_config.feature_columns is not None:
             missing_cols = [
                 col
-                for col in self.config.feature_columns
+                for col in self.model_config.feature_columns
                 if col not in train_df.columns
             ]
             if missing_cols:
                 raise ValueError(
                     f"Configured feature_columns not found: {missing_cols}"
                 )
-            return list(self.config.feature_columns)
+            return list(self.model_config.feature_columns)
 
         return []
 
@@ -265,13 +268,13 @@ class NCFModel:
     ) -> DataLoader:
         return DataLoader(
             dataset,
-            batch_size=self.config.model_params.batch_size,
+            batch_size=self.model_config.model_params.batch_size,
             shuffle=shuffle,
             num_workers=0,
         )
 
     def _init_network(self) -> None:
-        params = self.config.model_params
+        params = self.model_config.model_params
         self.model = NCFNetwork(
             n_users=len(self.user_to_idx) + 1,
             n_items=len(self.item_to_idx) + 1,
@@ -334,7 +337,7 @@ class NCFModel:
         if self.model is None:
             raise RuntimeError("Model is not initialized.")
 
-        params = self.config.model_params
+        params = self.model_config.model_params
         train_dataset = self._build_dataset(train_df, with_target=True)
         train_loader = self._build_loader(train_dataset, shuffle=True)
 
@@ -419,17 +422,17 @@ class NCFModel:
     def predict(self, df: pd.DataFrame) -> np.ndarray:
         """Predict binary correctness label."""
         proba = self.predict_proba(df)
-        return (proba >= self.config.threshold).astype(np.int64)
+        return (proba >= self.model_config.threshold).astype(np.int64)
 
     def add_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Return dataframe with probability, binary prediction, and per-user rank."""
         out = df.copy()
-        out[self.config.output.score_col] = self.predict_proba(out)
-        out[self.config.output.prediction_col] = (
-            out[self.config.output.score_col] >= self.config.threshold
+        out[self.model_config.output.score_col] = self.predict_proba(out)
+        out[self.model_config.output.prediction_col] = (
+            out[self.model_config.output.score_col] >= self.model_config.threshold
         ).astype(int)
-        out[self.config.output.rank_col] = out.groupby(self.user_col)[
-            self.config.output.score_col
+        out[self.model_config.output.rank_col] = out.groupby(self.user_col)[
+            self.model_config.output.score_col
         ].rank(method="first", ascending=False)
         return out
 
@@ -440,7 +443,7 @@ class NCFModel:
 
         y_true = df[self.target_col].astype(int).to_numpy()
         y_proba = self.predict_proba(df)
-        y_pred = (y_proba >= self.config.threshold).astype(int)
+        y_pred = (y_proba >= self.model_config.threshold).astype(int)
 
         metrics = {
             "log_loss": float(log_loss(y_true, y_proba, labels=[0, 1])),
@@ -465,7 +468,7 @@ class NCFModel:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         payload = {
-            "config": self.config.to_dict(),
+            "config": self.model_config.to_dict(),
             "state_dict": self.model.state_dict(),
             "user_to_idx": self.user_to_idx,
             "item_to_idx": self.item_to_idx,
@@ -481,14 +484,15 @@ class NCFModel:
     def load(
         cls,
         file_path: str | Path,
-        config: NCFModelConfig | None = None,
+        pipeline_config: HistoryBasedPipelineConfig,
+        model_config: NCFModelConfig | None = None,
     ) -> "NCFModel":
         """Load a saved NCF model."""
         path = Path(file_path)
         payload = torch.load(path, map_location="cpu", weights_only=False)
 
-        model_config = config or NCFModelConfig.from_dict(payload["config"])
-        instance = cls(model_config)
+        resolved_model_config = model_config or pipeline_config.ncf_config
+        instance = cls(config=pipeline_config, model_config=resolved_model_config)
         instance.user_to_idx = payload["user_to_idx"]
         instance.item_to_idx = payload["item_to_idx"]
         instance.feature_columns = payload["feature_columns"]
@@ -525,8 +529,12 @@ if __name__ == "__main__":
     )
 
     model_config = pipeline_config.ncf_config
-    model = NCFModel(config=model_config)
+    model = NCFModel(config=pipeline_config, model_config=model_config)
     model.fit(train_features, val_features)
     model.save("outputs/ncf_model.pth")
-    model = NCFModel.load("outputs/ncf_model.pth", config=model_config)
+    model = NCFModel.load(
+        "outputs/ncf_model.pth",
+        pipeline_config=pipeline_config,
+        model_config=model_config,
+    )
     model.predict(test_features)

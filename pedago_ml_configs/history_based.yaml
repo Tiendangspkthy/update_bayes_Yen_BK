@@ -72,3 +72,28 @@ ncf_config:
     score_col: ncf_pred_proba
     prediction_col: ncf_pred
     rank_col: ncf_rank
+
+zpd_config:
+  model_name: zpd
+  probability_col: xgb_pred_proba # or ncf_pred_proba, kt_pred_proba
+  base_score_col: null
+
+  model_params:
+    score_mode: probability
+    lower_probability: 0.55
+    target_probability: 0.65
+    upper_probability: 0.75
+    min_in_zone_score: 0.7
+    outside_tolerance: 0.25
+    clip_probability: true
+    base_score_weight: 0.4
+    zpd_score_weight: 0.6
+
+  output:
+    zpd_value_col: zpd_value
+    zpd_distance_col: zpd_distance
+    zpd_score_col: zpd_score
+    zpd_label_col: zpd_label
+    is_aligned_col: is_zpd_aligned
+    adjusted_score_col: zpd_adjusted_score
+    rank_col: zpd_rank

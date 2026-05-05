@@ -2,7 +2,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional, Type, TypeVar, Union
+from typing import Any, Dict, Literal, Optional, Type, TypeVar, Union
 
 import yaml
 from pydantic import BaseModel, Field
@@ -89,10 +89,6 @@ class XGBOutputConfig(BaseModel):
 class XGBModelConfig(BaseConfig):
     model_name: str = "xgb"
 
-    user_id: str = "StudentID"
-    item_id: str = "QuestionID"
-    target_col: str = "Result"
-
     threshold: float = 0.5
     feature_columns: Optional[list[str]] = None
 
@@ -131,15 +127,53 @@ class NCFModelConfig(BaseConfig):
 
     model_name: str = "ncf"
 
-    user_id: str = "StudentID"
-    item_id: str = "QuestionID"
-    target_col: str = "Result"
-
     threshold: float = 0.5
     feature_columns: Optional[list[str]] = None
 
     model_params: NCFParamsConfig = NCFParamsConfig()
     output: NCFOutputConfig = NCFOutputConfig()
+
+
+class ZPDParamsConfig(BaseModel):
+    score_mode: Literal["probability", "ability_difficulty"] = "probability"
+
+    lower_probability: float = 0.55
+    target_probability: float = 0.65
+    upper_probability: float = 0.75
+
+    lower_difficulty_gap: float = -0.5
+    target_difficulty_gap: float = 0.0
+    upper_difficulty_gap: float = 0.5
+
+    min_in_zone_score: float = 0.7
+    outside_tolerance: float = 0.25
+    clip_probability: bool = True
+
+    base_score_weight: float = 0.4
+    zpd_score_weight: float = 0.6
+
+
+class ZPDOutputConfig(BaseModel):
+    zpd_value_col: str = "zpd_value"
+    zpd_distance_col: str = "zpd_distance"
+    zpd_score_col: str = "zpd_score"
+    zpd_label_col: str = "zpd_label"
+    is_aligned_col: str = "is_zpd_aligned"
+    adjusted_score_col: str = "zpd_adjusted_score"
+    rank_col: str = "zpd_rank"
+
+
+class ZPDTheoryConfig(BaseConfig):
+    model_name: str = "zpd"
+    probability_col: Optional[str] = "xgb_pred_proba"
+
+    base_score_col: Optional[str] = None
+
+    ability_col: Optional[str] = None
+    item_difficulty_col: Optional[str] = None
+
+    model_params: ZPDParamsConfig = ZPDParamsConfig()
+    output: ZPDOutputConfig = ZPDOutputConfig()
 
 
 class BasePipelineConfig(BaseConfig):
@@ -163,6 +197,7 @@ class BasePipelineConfig(BaseConfig):
 class HistoryBasedPipelineConfig(BasePipelineConfig):
     xgb_config: XGBModelConfig = XGBModelConfig()
     ncf_config: NCFModelConfig = NCFModelConfig()
+    zpd_config: ZPDTheoryConfig = ZPDTheoryConfig()
 
 
 def load_data_from_file(config_path: Path) -> Dict[str, Any]:

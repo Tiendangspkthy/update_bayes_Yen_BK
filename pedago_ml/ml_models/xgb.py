@@ -15,22 +15,25 @@ from pedago_ml.utils.config import HistoryBasedPipelineConfig, XGBModelConfig
 class XGBModel:
     """Simple XGBoost baseline for history-based question recommendation."""
 
-    def __init__(self, config: XGBModelConfig):
+    def __init__(
+        self, config: HistoryBasedPipelineConfig, model_config: XGBModelConfig
+    ):
         self.config = config
+        self.model_config = model_config
         self.feature_columns: list[str] = []
-        self.model = XGBClassifier(**config.model_params.model_dump())
+        self.model = XGBClassifier(**model_config.model_params.model_dump())
 
     def _select_features(self, df: pd.DataFrame) -> list[str]:
-        if self.config.feature_columns is not None:
-            return self.config.feature_columns
+        if self.model_config.feature_columns is not None:
+            return self.model_config.feature_columns
 
         exclude_cols = {
             self.config.user_id,
             self.config.item_id,
-            self.config.target_col,
-            self.config.output.score_col,
-            self.config.output.prediction_col,
-            self.config.output.rank_col,
+            self.config.target,
+            self.model_config.output.score_col,
+            self.model_config.output.prediction_col,
+            self.model_config.output.rank_col,
         }
 
         feature_cols = [
@@ -57,10 +60,10 @@ class XGBModel:
         )
 
     def _make_y(self, df: pd.DataFrame) -> np.ndarray:
-        if self.config.target_col not in df.columns:
-            raise ValueError(f"Missing target column: {self.config.target_col}")
+        if self.config.target not in df.columns:
+            raise ValueError(f"Missing target column: {self.config.target}")
 
-        return df[self.config.target_col].astype(int).to_numpy()
+        return df[self.config.target].astype(int).to_numpy()
 
     def fit(self, train_df: pd.DataFrame) -> "XGBModel":
         self.feature_columns = self._select_features(train_df)
@@ -74,29 +77,29 @@ class XGBModel:
         return self.model.predict_proba(self._make_x(df))[:, 1]
 
     def predict(self, df: pd.DataFrame) -> np.ndarray:
-        return (self.predict_proba(df) >= self.config.threshold).astype(int)
+        return (self.predict_proba(df) >= self.model_config.threshold).astype(int)
 
     def add_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
         out = df.copy()
-        out[self.config.output.score_col] = self.predict_proba(out)
-        out[self.config.output.prediction_col] = self.predict(out)
+        out[self.model_config.output.score_col] = self.predict_proba(out)
+        out[self.model_config.output.prediction_col] = self.predict(out)
         return out
 
     def rank_candidates(self, df: pd.DataFrame) -> pd.DataFrame:
         """Rank hidden candidate questions inside each student pool."""
         out = self.add_predictions(df)
-        out[self.config.output.rank_col] = out.groupby(self.config.user_id)[
-            self.config.output.score_col
+        out[self.model_config.output.rank_col] = out.groupby(self.config.user_id)[
+            self.model_config.output.score_col
         ].rank(ascending=False, method="first")
 
         return out.sort_values(
-            [self.config.user_id, self.config.output.rank_col]
+            [self.config.user_id, self.model_config.output.rank_col]
         ).reset_index(drop=True)
 
     def evaluate(self, df: pd.DataFrame) -> dict[str, float]:
         y_true = self._make_y(df)
         y_score = self.predict_proba(df)
-        y_pred = (y_score >= self.config.threshold).astype(int)
+        y_pred = (y_score >= self.model_config.threshold).astype(int)
 
         metrics = {
             "logloss": float(log_loss(y_true, y_score, labels=[0, 1])),
@@ -142,7 +145,7 @@ if __name__ == "__main__":
     )
 
     model_config = pipeline_config.xgb_config
-    model = XGBModel(config=model_config)
+    model = XGBModel(config=pipeline_config, model_config=model_config)
     model.fit(train_features)
 
     val_metrics = model.evaluate(val_features)
