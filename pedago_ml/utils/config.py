@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Type, TypeVar, Union
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ENV_PATTERN = re.compile(r"\$\{(\w+)\}")
 
@@ -98,6 +98,55 @@ class XGBModelConfig(BaseConfig):
 
     model_params: XGBParamsConfig = XGBParamsConfig()
     output: XGBOutputConfig = XGBOutputConfig()
+
+    @classmethod
+    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
+        data = resolve_dict(data)
+        instance = cls(**data)
+        instance.load_from_env()
+        return instance
+
+
+class NCFParamsConfig(BaseModel):
+    """Neural Collaborative Filtering hyperparameters."""
+
+    embedding_dim: int = 16
+    hidden_dims: list[int] = Field(default_factory=lambda: [64, 32])
+    dropout: float = 0.1
+
+    learning_rate: float = 0.001
+    weight_decay: float = 0.00001
+    batch_size: int = 512
+    epochs: int = 50
+    early_stopping_patience: int = 7
+    log_every_n_epochs: int = 5
+
+    random_state: int = 12
+    device: str = "auto"
+
+
+class NCFOutputConfig(BaseModel):
+    """NCF output columns."""
+
+    score_col: str = "ncf_pred_proba"
+    prediction_col: str = "ncf_pred"
+    rank_col: str = "ncf_rank"
+
+
+class NCFModelConfig(BaseConfig):
+    """Configuration for history-based NCF correctness prediction."""
+
+    model_name: str = "ncf"
+
+    user_id: str = "StudentID"
+    item_id: str = "QuestionID"
+    target_col: str = "Result"
+
+    threshold: float = 0.5
+    feature_columns: Optional[list[str]] = None
+
+    model_params: NCFParamsConfig = Field(default_factory=NCFParamsConfig)
+    output: NCFOutputConfig = Field(default_factory=NCFOutputConfig)
 
     @classmethod
     def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
