@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 from typing import Literal
 
 import numpy as np
 import pandas as pd
 
+from pedago_ml.base.edu_theory import BaseEduTheory
 from pedago_ml.features.dataloader import DataLoader
 from pedago_ml.features.feature_engineering import FeatureEngineer
 from pedago_ml.features.splitter import DataSplitter
@@ -15,7 +14,7 @@ from pedago_ml.utils.logger import logger
 ZPDMode = Literal["probability", "ability_difficulty"]
 
 
-class ZPDTheory:
+class ZPDTheory(BaseEduTheory):
     """
     Apply Zone of Proximal Development scoring to candidate questions.
 
@@ -31,10 +30,8 @@ class ZPDTheory:
     def __init__(
         self, config: HistoryBasedPipelineConfig, model_config: ZPDTheoryConfig
     ) -> None:
-        self.config = config
-        self.model_config = model_config
+        super().__init__(config=config, model_config=model_config)
         self.params = model_config.model_params
-        self.output = model_config.output
         self._validate_config()
 
     def _validate_config(self) -> None:
@@ -74,11 +71,6 @@ class ZPDTheory:
                     "lower_difficulty_gap < target_difficulty_gap "
                     "< upper_difficulty_gap."
                 )
-
-    def _require_columns(self, df: pd.DataFrame, columns: list[str]) -> None:
-        missing_cols = [col for col in columns if col not in df.columns]
-        if missing_cols:
-            raise ValueError(f"Input dataframe is missing columns: {missing_cols}")
 
     def _prepare_probability(self, df: pd.DataFrame) -> np.ndarray:
         prob_col = self.model_config.probability_col
@@ -269,20 +261,7 @@ class ZPDTheory:
 
         return self._add_adjusted_score(out)
 
-    def rank_candidates(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply ZPD scoring and rank candidate questions per student."""
-        out = self.apply(df)
-        self._require_columns(out, [self.config.user_id])
-
-        out[self.output.rank_col] = out.groupby(self.config.user_id)[
-            self.output.adjusted_score_col
-        ].rank(method="first", ascending=False)
-
-        return out.sort_values([self.config.user_id, self.output.rank_col]).reset_index(
-            drop=True
-        )
-
-    def evaluate_alignment(
+    def evaluate(
         self,
         df: pd.DataFrame,
         top_k: int | None = None,
@@ -312,10 +291,19 @@ class ZPDTheory:
             "too_hard_rate": float(labels.eq("too_hard").sum() / n_rows),
             "too_easy_rate": float(labels.eq("too_easy").sum() / n_rows),
         }
-        logger.info("=" * 20 + f"ZPD top-{top_k} alignment metrics " + "=" * 20)
+        scope = f"top-{top_k}" if top_k is not None else "all"
+        logger.info("=" * 20 + f" ZPD {scope} alignment metrics " + "=" * 20)
         for key, val in metrics.items():
             logger.info("{:<20}: {}".format(key, val))
         return metrics
+
+    def evaluate_alignment(
+        self,
+        df: pd.DataFrame,
+        top_k: int | None = None,
+    ) -> dict[str, float]:
+        """Backward-compatible alias for evaluate()."""
+        return self.evaluate(df=df, top_k=top_k)
 
 
 if __name__ == "__main__":

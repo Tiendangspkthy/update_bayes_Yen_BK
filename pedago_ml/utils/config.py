@@ -176,6 +176,35 @@ class ZPDTheoryConfig(BaseConfig):
     output: ZPDOutputConfig = ZPDOutputConfig()
 
 
+class FlowParamsConfig(BaseModel):
+    lower_probability: float = 0.45
+    target_probability: float = 0.60
+    upper_probability: float = 0.75
+    min_in_flow_score: float = 0.7
+    outside_tolerance: float = 0.25
+    clip_probability: bool = True
+    base_score_weight: float = 0.5
+    flow_score_weight: float = 0.5
+
+
+class FlowOutputConfig(BaseModel):
+    flow_value_col: str = "flow_value"
+    flow_distance_col: str = "flow_distance"
+    flow_score_col: str = "flow_score"
+    flow_label_col: str = "flow_label"
+    is_aligned_col: str = "is_flow_aligned"
+    adjusted_score_col: str = "flow_adjusted_score"
+    rank_col: str = "flow_rank"
+
+
+class FlowTheoryConfig(BaseConfig):
+    model_name: str = "flow_theory"
+    probability_col: Optional[str] = "xgb_pred_proba"
+    base_score_col: Optional[str] = None
+    model_params: FlowParamsConfig = FlowParamsConfig()
+    output: FlowOutputConfig = FlowOutputConfig()
+
+
 class BasePipelineConfig(BaseConfig):
     interaction_data_path: str
     item_data_path: str
@@ -198,6 +227,7 @@ class HistoryBasedPipelineConfig(BasePipelineConfig):
     xgb_config: XGBModelConfig = XGBModelConfig()
     ncf_config: NCFModelConfig = NCFModelConfig()
     zpd_config: ZPDTheoryConfig = ZPDTheoryConfig()
+    flow_config: FlowTheoryConfig = FlowTheoryConfig()
 
 
 def load_data_from_file(config_path: Path) -> Dict[str, Any]:

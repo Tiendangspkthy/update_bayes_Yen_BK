@@ -1,6 +1,7 @@
 import pytest
 from conftest import BaseTest
 
+from pedago_ml.edu_theory.flow_theory import FlowTheory
 from pedago_ml.edu_theory.zpd import ZPDTheory
 from pedago_ml.features.dataloader import DataLoader
 from pedago_ml.features.feature_engineering import FeatureEngineer
@@ -74,6 +75,8 @@ class TestPipeline(BaseTest):
         ncf_model.fit(train_features, val_features)
         assert ncf_model is not None
         assert ncf_model.model is not None
+        metrics = ncf_model.evaluate(val_features)
+        assert {"log_loss", "accuracy", "auc"} <= set(metrics.keys())
         return ncf_model
 
     def zpd_model(self, ml_model):
@@ -89,12 +92,35 @@ class TestPipeline(BaseTest):
         assert alignment is not None
         return zpd_model
 
+    def flow_model(self, ml_model):
+        _, _, test_features = self.feature_engineer()
+        test_ranked = ml_model.rank_candidates(test_features)
+        assert test_ranked is not None
+
+        flow_model_config = config.flow_config
+        flow_model = FlowTheory(config=config, model_config=flow_model_config)
+        ranked = flow_model.rank_candidates(test_ranked)
+        assert ranked is not None
+
+        alignment = flow_model.evaluate(ranked, top_k=2)
+        assert {
+            "flow_alignment_rate",
+            "mean_flow_score",
+            "over_challenged_rate",
+            "under_challenged_rate",
+        } <= set(alignment.keys())
+        return flow_model
+
     @pytest.mark.order("last")
     def test_pipeline(self):
         xgb_model = self.xgb_model()
         zpd_model = self.zpd_model(xgb_model)
         assert zpd_model is not None
+        flow_model = self.flow_model(xgb_model)
+        assert flow_model is not None
 
         ncf_model = self.ncf_model()
         zpd_model = self.zpd_model(ncf_model)
         assert zpd_model is not None
+        flow_model = self.flow_model(ncf_model)
+        assert flow_model is not None
