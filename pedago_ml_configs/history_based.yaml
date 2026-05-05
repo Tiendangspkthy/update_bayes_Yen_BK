@@ -73,6 +73,32 @@ ncf_config:
     prediction_col: prediction
     rank_col: rank
 
+knowledge_tracing_config:
+  model_name: knowledge_tracing
+  threshold: 0.5
+
+  model_params:
+    alpha: 1.0
+    beta: 1.0
+    w0: 0.0
+    w1: 3.0
+    w2: 2.0
+    category_columns:
+      - a_category
+      - b_category
+      - c_category
+      - d_category
+      - e_category
+    category_aggregation: mean
+    item_accuracy_col: item_accuracy
+    clip_probability: true
+
+  output:
+    score_col: pred_proba
+    prediction_col: prediction
+    rank_col: rank
+
+
 zpd_config:
   model_name: zpd
   probability_col: pred_proba

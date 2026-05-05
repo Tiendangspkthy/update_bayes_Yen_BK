@@ -60,9 +60,13 @@ class SplitterConfig(BaseModel):
     test_ratio: float
 
 
-class XGBParamsConfig(BaseModel):
-    """XGBoost hyperparameters."""
+class MLModelOutputConfig(BaseModel):
+    score_col: str = "pred_proba"
+    prediction_col: str = "prediction"
+    rank_col: str = "rank"
 
+
+class XGBParamsConfig(BaseModel):
     n_estimators: int = 300
     max_depth: int = 3
     learning_rate: float = 0.05
@@ -78,14 +82,6 @@ class XGBParamsConfig(BaseModel):
     n_jobs: int = -1
 
 
-class XGBOutputConfig(BaseModel):
-    """XGBoost output columns and artifact path."""
-
-    score_col: str = "xgb_pred_proba"
-    prediction_col: str = "xgb_pred"
-    rank_col: str = "xgb_rank"
-
-
 class XGBModelConfig(BaseConfig):
     model_name: str = "xgb"
 
@@ -93,12 +89,10 @@ class XGBModelConfig(BaseConfig):
     feature_columns: Optional[list[str]] = None
 
     model_params: XGBParamsConfig = XGBParamsConfig()
-    output: XGBOutputConfig = XGBOutputConfig()
+    output: MLModelOutputConfig = MLModelOutputConfig()
 
 
 class NCFParamsConfig(BaseModel):
-    """Neural Collaborative Filtering hyperparameters."""
-
     embedding_dim: int = 16
     hidden_dims: list[int] = Field(default_factory=lambda: [64, 32])
     dropout: float = 0.1
@@ -114,24 +108,45 @@ class NCFParamsConfig(BaseModel):
     device: str = "auto"
 
 
-class NCFOutputConfig(BaseModel):
-    """NCF output columns."""
-
-    score_col: str = "ncf_pred_proba"
-    prediction_col: str = "ncf_pred"
-    rank_col: str = "ncf_rank"
-
-
 class NCFModelConfig(BaseConfig):
-    """Configuration for history-based NCF correctness prediction."""
-
     model_name: str = "ncf"
 
     threshold: float = 0.5
     feature_columns: Optional[list[str]] = None
 
     model_params: NCFParamsConfig = NCFParamsConfig()
-    output: NCFOutputConfig = NCFOutputConfig()
+    output: MLModelOutputConfig = MLModelOutputConfig()
+
+
+class KnowledgeTracingParamsConfig(BaseModel):
+    alpha: float = 1.0
+    beta: float = 1.0
+
+    w0: float = 0.0
+    w1: float = 3.0
+    w2: float = 2.0
+
+    category_columns: list[str] = Field(
+        default_factory=lambda: [
+            "a_category",
+            "b_category",
+            "c_category",
+            "d_category",
+            "e_category",
+        ]
+    )
+    category_aggregation: Literal["mean", "max"] = "mean"
+    item_accuracy_col: str = "item_accuracy"
+
+    clip_probability: bool = True
+
+
+class KnowledgeTracingModelConfig(BaseConfig):
+    model_name: str = "knowledge_tracing"
+    threshold: float = 0.5
+    probability_col: Optional[str] = None
+    model_params: KnowledgeTracingParamsConfig = KnowledgeTracingParamsConfig()
+    output: MLModelOutputConfig = MLModelOutputConfig()
 
 
 class ZPDParamsConfig(BaseModel):
@@ -228,6 +243,9 @@ class HistoryBasedPipelineConfig(BasePipelineConfig):
     ncf_config: NCFModelConfig = NCFModelConfig()
     zpd_config: ZPDTheoryConfig = ZPDTheoryConfig()
     flow_config: FlowTheoryConfig = FlowTheoryConfig()
+    knowledge_tracing_config: KnowledgeTracingModelConfig = (
+        KnowledgeTracingModelConfig()
+    )
 
 
 def load_data_from_file(config_path: Path) -> Dict[str, Any]:

@@ -6,10 +6,10 @@ from pedago_ml.edu_theory.zpd import ZPDTheory
 from pedago_ml.features.dataloader import DataLoader
 from pedago_ml.features.feature_engineering import FeatureEngineer
 from pedago_ml.features.splitter import DataSplitter
+from pedago_ml.ml_models.knowledge_tracing import KnowledgeTracingModel
 from pedago_ml.ml_models.ncf import NCFModel
 from pedago_ml.ml_models.xgb import XGBModel
 from pedago_ml.utils.config import HistoryBasedPipelineConfig
-from pedago_ml.utils.logger import logger
 
 config = HistoryBasedPipelineConfig.load_config("pedago_ml_configs/history_based.yaml")
 
@@ -79,16 +79,28 @@ class TestPipeline(BaseTest):
         assert {"log_loss", "accuracy", "auc"} <= set(metrics.keys())
         return ncf_model
 
+    def knowledge_tracing_model(self):
+        train_features, val_features, _ = self.feature_engineer()
+        kt_model_config = config.knowledge_tracing_config
+        kt_model = KnowledgeTracingModel(config=config, model_config=kt_model_config)
+        kt_model.fit(train_features)
+        assert kt_model is not None
+        metrics = kt_model.evaluate(val_features)
+        assert {"log_loss", "accuracy", "auc"} <= set(metrics.keys())
+        return kt_model
+
     def zpd_model(self, ml_model):
         _, val_features, test_features = self.feature_engineer()
         test_ranked = ml_model.rank_candidates(test_features)
         assert test_ranked is not None
 
-        zpd_model_config = config.zpd_config
+        # Use the current ML model's probability output column (xgb/ncf/kt)
+        zpd_model_config = config.zpd_config.model_copy(deep=True)
+        zpd_model_config.probability_col = ml_model.model_config.output.score_col
         zpd_model = ZPDTheory(config=config, model_config=zpd_model_config)
         ranked = zpd_model.rank_candidates(test_ranked)
         assert ranked is not None
-        alignment = zpd_model.evaluate_alignment(ranked, top_k=2)
+        alignment = zpd_model.evaluate(ranked, top_k=2)
         assert alignment is not None
         return zpd_model
 
@@ -97,7 +109,9 @@ class TestPipeline(BaseTest):
         test_ranked = ml_model.rank_candidates(test_features)
         assert test_ranked is not None
 
-        flow_model_config = config.flow_config
+        # Use the current ML model's probability output column (xgb/ncf/kt)
+        flow_model_config = config.flow_config.model_copy(deep=True)
+        flow_model_config.probability_col = ml_model.model_config.output.score_col
         flow_model = FlowTheory(config=config, model_config=flow_model_config)
         ranked = flow_model.rank_candidates(test_ranked)
         assert ranked is not None
@@ -123,4 +137,10 @@ class TestPipeline(BaseTest):
         zpd_model = self.zpd_model(ncf_model)
         assert zpd_model is not None
         flow_model = self.flow_model(ncf_model)
+        assert flow_model is not None
+
+        kt_model = self.knowledge_tracing_model()
+        zpd_model = self.zpd_model(kt_model)
+        assert zpd_model is not None
+        flow_model = self.flow_model(kt_model)
         assert flow_model is not None
