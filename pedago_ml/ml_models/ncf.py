@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, Dataset
 from pedago_ml.features.dataloader import DataLoader as DataLoaderFeature
 from pedago_ml.features.feature_engineering import FeatureEngineer
 from pedago_ml.features.splitter import DataSplitter
-from pedago_ml.utils.config import BasePipelineConfig, NCFModelConfig
+from pedago_ml.utils.config import HistoryBasedPipelineConfig, NCFModelConfig
 from pedago_ml.utils.logger import logger
 
 
@@ -384,7 +384,9 @@ class NCFModel:
             self.history.append(record)
 
             if epoch % params.log_every_n_epochs == 0 or epoch == 1:
-                logger.info(f"Epoch {epoch}/{params.epochs}: {record}")
+                logger.info("=" * 20 + f" EPOCH {epoch}/{params.epochs} " + "=" * 20)
+                for key, val in record.items():
+                    logger.info("{:<20}: {}".format(key, val))
 
         if best_state is not None:
             self.model.load_state_dict(best_state)
@@ -503,8 +505,8 @@ class NCFModel:
 
 
 if __name__ == "__main__":
-    pipeline_config = BasePipelineConfig.load_config(
-        "pedago_ml_configs/pipelines/history_based.yaml"
+    pipeline_config = HistoryBasedPipelineConfig.load_config(
+        "pedago_ml_configs/history_based.yaml"
     )
     data = DataLoaderFeature(config=pipeline_config).run()
     splitter = DataSplitter(config=pipeline_config)
@@ -522,9 +524,9 @@ if __name__ == "__main__":
         test_df=test_df,
     )
 
-    model_config = NCFModelConfig.load_config("pedago_ml_configs/ml_models/ncf.yaml")
-    model = NCFModel(model_config)
+    model_config = pipeline_config.ncf_config
+    model = NCFModel(config=model_config)
     model.fit(train_features, val_features)
     model.save("outputs/ncf_model.pth")
-    model = NCFModel.load("outputs/ncf_model.pth", model_config)
+    model = NCFModel.load("outputs/ncf_model.pth", config=model_config)
     model.predict(test_features)

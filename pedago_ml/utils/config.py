@@ -99,13 +99,6 @@ class XGBModelConfig(BaseConfig):
     model_params: XGBParamsConfig = XGBParamsConfig()
     output: XGBOutputConfig = XGBOutputConfig()
 
-    @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
-        data = resolve_dict(data)
-        instance = cls(**data)
-        instance.load_from_env()
-        return instance
-
 
 class NCFParamsConfig(BaseModel):
     """Neural Collaborative Filtering hyperparameters."""
@@ -145,15 +138,8 @@ class NCFModelConfig(BaseConfig):
     threshold: float = 0.5
     feature_columns: Optional[list[str]] = None
 
-    model_params: NCFParamsConfig = Field(default_factory=NCFParamsConfig)
-    output: NCFOutputConfig = Field(default_factory=NCFOutputConfig)
-
-    @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
-        data = resolve_dict(data)
-        instance = cls(**data)
-        instance.load_from_env()
-        return instance
+    model_params: NCFParamsConfig = NCFParamsConfig()
+    output: NCFOutputConfig = NCFOutputConfig()
 
 
 class BasePipelineConfig(BaseConfig):
@@ -172,6 +158,11 @@ class BasePipelineConfig(BaseConfig):
         instance = cls(**data)
         instance.load_from_env()
         return instance
+
+
+class HistoryBasedPipelineConfig(BasePipelineConfig):
+    xgb_config: XGBModelConfig = XGBModelConfig()
+    ncf_config: NCFModelConfig = NCFModelConfig()
 
 
 def load_data_from_file(config_path: Path) -> Dict[str, Any]:
