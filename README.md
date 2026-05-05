@@ -1,255 +1,345 @@
 # pedago_ml
-A research-oriented framework for adaptive question selection, combining machine learning, psychometric modeling, and educational theory to support both history-based recommendation and cold-start diagnostic question selection.
 
-## Setup
+`pedago_ml` is a research-oriented framework for adaptive question selection. The project combines machine learning, psychometric modeling, and educational theory to study whether pedagogically constrained recommendation improves student-question selection compared with model-only baselines.
+
+The repository currently focuses on a fixed research dataset for paper development: 3,850 students, each answering the same 30 questions. Because the dataset is fixed, the main engineering priority is reproducible experimentation rather than large-scale production ingestion.
+
+## 1. Project Goals
+
+The framework is designed to support two related adaptive learning settings:
+
+1. **History-based adaptive question selection**
+   - Uses existing student response history.
+   - Trains predictive models such as XGBoost and Neural Collaborative Filtering.
+   - Estimates the probability that a student will answer a candidate question correctly.
+   - Applies educational-theory constraints such as Zone of Proximal Development (ZPD) and Flow Theory.
+   - Ranks candidate questions for each student.
+
+2. **Cold-start diagnostic question selection**
+   - Targets new students with limited or no response history.
+   - Uses psychometric modeling such as Rasch / IRT to estimate item difficulty and student ability.
+   - Selects diagnostic questions using information gain while keeping the question within a suitable learning zone.
+
+The current implementation is strongest for the history-based setting. Cold-start modules are part of the intended research architecture and can be expanded as the psychometric components mature.
+
+## 2. Repository Structure
+
+```text
+pedago_ml/
+├── base/
+│   ├── edu_theory.py          # Base interface for educational-theory modules
+│   ├── ml_model.py            # Base interface for ML models
+│   └── pipeline.py            # Base interface for pipelines
+├── features/
+│   ├── dataloader.py          # Load interaction data and item metadata
+│   ├── splitter.py            # Split train/validation/test by student history
+│   └── feature_engineering.py # Build leakage-safe aggregate features
+├── edu_theory/
+│   ├── zpd.py                 # Zone of Proximal Development scoring
+│   └── flow_theory.py         # Flow-theory scoring
+├── ml_models/
+│   ├── xgb.py                 # XGBoost correctness prediction model
+│   ├── ncf.py                 # Neural Collaborative Filtering model
+│   └── knowledge_tracing.py   # Knowledge tracing model
+├── psychometrics/
+│   ├── rasch.py               # Rasch / IRT item calibration
+│   ├── ability_estimator.py   # Student ability estimation
+│   └── posterior_updater.py   # Ability posterior update logic
+├── pipelines/
+│   ├── history_based.py       # History-based adaptive recommendation pipeline
+│   └── cold_start.py          # Cold-start diagnostic pipeline
+├── utils/
+│   ├── config.py              # Pydantic configuration classes
+│   └── logger.py              # Shared logging utility
+├── evaluation.py              # Evaluation logic
+├── factory.py                 # Component factory
+└── scoring.py                 # Scoring and ranking utilities
+
+pedago_ml_configs/
+├── history_based.yaml         # Main config for history-based experiments
+└── cold_start.yaml            # Main config for cold-start experiments
+```
+
+Configuration is intentionally kept flat under `pedago_ml_configs/`. Model-specific and educational-theory settings are nested inside the main pipeline config instead of being stored in separate subfolders.
+
+## 3. Data Format
+
+### 3.1 Interaction data
+
+The interaction file is configured through:
+
+```yaml
+interaction_data_path: "data/full_data.csv"
+```
+
+Expected format:
+
+```text
+StudentID,1,2,3,...,30
+10001,1,0,1,...,0
+10002,0,1,1,...,1
+```
+
+Each row is one student. Each question column stores the binary response result:
+
+- `1`: correct answer
+- `0`: incorrect answer
+
+The dataloader melts this wide table into interaction-level format:
+
+```text
+StudentID | QuestionID | Result
+```
+
+### 3.2 Item metadata
+
+The item metadata file is configured through:
+
+```yaml
+item_data_path: "data/item_specification.csv"
+```
+
+Expected core columns:
+
+```text
+ItemID | Specification
+```
+
+The `Specification` field is parsed into item-level features:
+
+- `Level`
+- `Topic`
+- category indicator columns derived from the remaining specification tokens
+
+These item features are merged into the interaction-level dataset by `QuestionID`.
+
+## 4. Installation
+
 ### Requirements
-* Python 3.11
-* [uv](https://github.com/astral-sh/uv) - Modern Python package manager
 
-### Install uv
-If you don't have uv installed, you can install it using:
-```shell
+- Python 3.11
+- `uv`
+
+### Install `uv`
+
+```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### Setup the environment and python packages
-```shell
+### Create environment
+
+```bash
 make venv
 ```
-This will:
-- Install `uv` if not already installed
-- Install the specified Python version
-- Create a virtual environment in `.venv`
-- Install the package with dev dependencies
-- Set up pre-commit hooks
 
-### Activate the virtual environment
-```shell
+This command creates the virtual environment, installs dependencies, and prepares the development setup.
+
+### Activate environment
+
+```bash
 source .venv/bin/activate
 ```
 
-Or use `uv run` to execute commands in the virtual environment without activating it:
-```shell
+Or run commands directly with:
+
+```bash
 uv run python main.py
 ```
 
+## 5. Configuration
 
-### Data
-Get data from AEGlobal.
+The main history-based configuration is:
 
-## Project Commands
-### Quick start
-#### Run pipeline
-```shell
+```text
+pedago_ml_configs/history_based.yaml
+```
+
+It contains four major groups:
+
+```yaml
+interaction_data_path: "data/full_data.csv"
+item_data_path: "data/item_specification.csv"
+
+user_id: "StudentID"
+item_id: "QuestionID"
+target: "Result"
+
+item_features:
+  - name: "Level"
+    type: "categorical"
+  - name: "Topic"
+    type: "categorical"
+
+splitter:
+  train_ratio: 0.7
+  val_ratio: 0.2
+  test_ratio: 0.1
+
+smoothing: 5
+
+xgb_config:
+  ...
+
+ncf_config:
+  ...
+
+zpd:
+  ...
+```
+
+## 6. History-Based Pipeline
+
+The history-based pipeline follows this flow:
+
+```text
+Raw interaction data
+        ↓
+Dataloader
+        ↓
+Student-level train/validation/test split
+        ↓
+Leakage-safe feature engineering
+        ↓
+XGBoost / NCF correctness prediction
+        ↓
+ZPD / Flow pedagogical adjustment
+        ↓
+Per-student candidate ranking
+        ↓
+Evaluation
+```
+
+### Run pipeline
+
+```bash
 uv run python main.py
 ```
 
-By default, the pipeline trains an AI model using the configuration in `pedago_ml_configs/model.yaml`.
-To use a different setup (e.g., `xgboost.yaml`, `ncf.yaml`), update `main.py` to point to the desired config file.
+The default entrypoint should load:
 
-The pipeline performs the following steps:
+```python
+from pedago_ml.utils.config import HistoryBasedPipelineConfig
 
-1. Load and preprocess response data
-2. Split data into train/validation/test sets
-3. Train the selected model or calibrate psychometric parameters
-4. Estimate student-question suitability scores
-5. Apply ZPD / Flow constraints
-6. Rank or select next questions
-7. Evaluate prediction, ranking, and pedagogical alignment metrics
+config = HistoryBasedPipelineConfig.load_config(
+    "pedago_ml_configs/history_based.yaml"
+)
+```
 
-### Run unit test
-```shell
+## 7. Modeling Logic
+
+### 7.1 Prediction objective
+
+The main supervised learning target is:
+
+```text
+P(Result = 1 | StudentID, QuestionID, student history features, item features)
+```
+
+This probability is used as the base suitability signal.
+
+### 7.2 Pedagogical adjustment
+
+Model probability alone may recommend questions that are too easy. ZPD and Flow modules adjust the score toward questions that are neither too easy nor too difficult.
+
+A typical ZPD target range is:
+
+```text
+0.50 <= predicted probability <= 0.80
+```
+
+The ideal target can be set around:
+
+```text
+target_probability = 0.65
+```
+
+This encourages questions with moderate challenge, where the student is likely to learn rather than simply repeat already-mastered items.
+
+### 7.3 Final ranking
+
+For each student, candidate questions are ranked by adjusted score:
+
+```text
+zpd_adjusted_score = weighted_average(base_model_score, zpd_score)
+```
+
+The top-ranked items are treated as recommended next questions.
+
+## 8. Evaluation
+
+The project evaluates both predictive quality and pedagogical suitability.
+
+### 8.1 Predictive metrics
+
+- **LogLoss**: probability calibration and prediction quality
+- **AUC**: ranking separation between correct and incorrect responses
+- **Accuracy**: binary prediction quality under a threshold
+- **F1-score**: classification balance under a threshold
+
+### 8.2 Ranking metrics
+
+- **NDCG@K**: whether useful items are ranked near the top
+- **Recall@K**: whether relevant items are included in top-K
+- **HitRate@K**: whether at least one relevant item appears in top-K
+- **MRR**: how early the first relevant item appears
+
+### 8.3 Pedagogical metrics
+
+- **ZPD Alignment Rate**: proportion of recommendations inside the ZPD range
+- **Flow Alignment Rate**: proportion of recommendations inside the desired probability range
+- **Topic / Category Coverage**: diversity of recommended content
+- **Repeat Rate**: whether the same question is repeatedly recommended to the same student
+
+## 9. Ablation Design
+
+Because this is a research framework, experiments should compare model-only and pedagogically adjusted variants.
+
+Recommended ablation settings:
+
+| Experiment | Description |
+|---|---|
+| ML-only | Rank by base predicted probability only |
+| ML + ZPD | Adjust ranking using ZPD score |
+| ML + Flow | Adjust ranking using Flow score |
+| ML + ZPD + Flow | Combine ML score with multiple educational-theory constraints |
+| Rasch-only | Select questions using psychometric difficulty only |
+| Rasch + information gain | Select questions using expected information |
+| Rasch + information gain + ZPD | Combine diagnostic informativeness with pedagogical suitability |
+
+The key research question is whether educational-theory-aware ranking improves adaptive question selection compared with pure model-based ranking.
+
+## 10. Development Commands
+
+### Run tests
+
+```bash
 make test
 ```
-Runs linting, type checking, and unit tests.
 
-### Run styling
-```shell
+### Format and style
+
+```bash
 make style
 ```
-Formats code with black, checks with flake8, and sorts imports with isort.
 
-## Configuration
+### Run a single module manually
 
-The project uses YAML configuration files located in `pedago_ml_configs/`:
-- `edu_theory/zpd.yaml`
-- `edu_theory/flow_theory.yaml`
-- `ml_models/xgb.yaml`
-- `ml_models/ncf.yaml`
-- `ml_models/knowledge_tracing.yaml`
-- `psychometrics/rasch.yaml`
-- `psychometrics/posterior.yaml`
-- `pipelines/history_based.yaml`
-- `pipelines/cold_start.yaml`
+```bash
+uv run python -m pedago_ml.ml_models.xgb
+uv run python -m pedago_ml.ml_models.ncf
+```
 
-
-### Architecture
-
-The framework is designed for two adaptive question selection settings:
-
-1. **History-based adaptive question selection**
-   This setting assumes that a student already has historical response records. The system uses machine learning models such as XGBoost, Neural Collaborative Filtering, and Knowledge Tracing to estimate student-question interaction patterns. Educational theory modules such as Zone of Proximal Development and Flow Theory are then applied to adjust the recommendation score toward pedagogically suitable questions.
-
-2. **Cold-start diagnostic question selection**
-   This setting targets new students with little or no response history. The system first calibrates question difficulty using Rasch / IRT 1PL. A new student's ability is initialized with a prior distribution and updated after each response. The next question is selected by maximizing expected information while keeping the predicted probability of correctness within a pedagogically appropriate range.
-
-The repository is organized around five core component groups:
-
-- **features/**: Handles data loading, train/validation/test splitting, and feature engineering.
-- **ml_models/**: Contains predictive models for history-based recommendation, including XGBoost, NCF, and Knowledge Tracing.
-- **psychometrics/**: Contains Rasch / IRT-based item calibration, ability estimation, and posterior updating for cold-start diagnosis.
-- **edu_theory/**: Implements pedagogical constraints and scoring mechanisms such as ZPD and Flow Theory.
-- **pipelines/**: Provides task-specific pipelines for history-based recommendation and cold-start diagnostic selection.
-
-The overall architecture is:
+If module-level scripts still reference old nested config paths such as `pedago_ml_configs/pipelines/history_based.yaml`, update them to:
 
 ```text
-Historical response data
-        ↓
-Feature engineering
-        ↓
-History-based ML / KT models
-        ↓
-ML-based correctness prediction
-        ↓
-ZPD / Flow scoring
-        ↓
-Hybrid question ranking
+pedago_ml_configs/history_based.yaml
 ```
-For the cold-start setting:
-```text
-Historical item responses
-        ↓
-Rasch / IRT item calibration
-        ↓
-Initialize student ability prior
-        ↓
-Observe response to selected question
-        ↓
-Update ability posterior
-        ↓
-Expected information + ZPD / Flow constraints
-        ↓
-Select next diagnostic question
-```
-After the cold-start phase, the estimated ability and uncertainty can be used to initialize the history-based adaptive practice pipeline.
 
+## 11. Design Notes
 
-## Evaluation
-
-The framework evaluates both predictive performance and pedagogical suitability. Since the project focuses on adaptive question selection, the evaluation is organized into two groups: history-based evaluation and cold-start evaluation.
-
-### 1. History-based Evaluation
-
-The history-based pipeline evaluates how well the model ranks suitable next questions for students with existing response history.
-
-Supported metrics include:
-
-- **AUC / LogLoss**:
-  Measures the quality of predicted correctness probabilities.
-
-- **Accuracy / F1-score**:
-  Evaluates binary correctness prediction when a classification threshold is used.
-
-- **NDCG@K**:
-  Evaluates whether highly suitable questions are ranked near the top.
-
-- **Recall@K**:
-  Measures whether relevant or suitable questions appear in the top-K recommendations.
-
-- **HitRate@K**:
-  Checks whether at least one relevant question appears in the top-K list.
-
-- **MRR (Mean Reciprocal Rank)**:
-  Measures how early the first relevant question appears in the ranked list.
-
-- **ZPD Alignment Rate**:
-  Measures the proportion of recommended questions whose predicted difficulty is within the target learning zone.
-
-- **Flow Alignment Rate**:
-  Measures whether recommended questions fall into the target probability-of-correctness range, avoiding questions that are too easy or too difficult.
-
-- **Topic / Category Coverage**:
-  Measures whether recommendations cover diverse topics or categories instead of repeatedly selecting similar questions.
-
-### 2. Cold-start Evaluation
-
-The cold-start pipeline evaluates how efficiently the system estimates a new student's ability and selects informative diagnostic questions.
-
-Supported metrics include:
-
-- **Theta Estimation Error**:
-  Measures the error between estimated ability and reference ability when ground truth or simulated ability is available.
-
-- **Posterior Uncertainty Reduction**:
-  Measures how quickly uncertainty about student ability decreases after each diagnostic question.
-
-- **Expected Information Gain**:
-  Measures the amount of information gained from selected questions.
-
-- **Number of Questions to Stable Ability Estimate**:
-  Tracks how many diagnostic questions are needed before the ability estimate becomes stable.
-
-- **Target Probability Alignment**:
-  Measures whether selected questions fall within the desired probability-of-correctness range, such as 55%–75%.
-
-- **ZPD / Flow Alignment**:
-  Evaluates whether selected diagnostic questions are pedagogically appropriate, not only statistically informative.
-
-- **Topic / Category Diversity**:
-  Measures whether the diagnostic sequence avoids repeatedly selecting questions from the same topic or category.
-
-- **Repeat Rate**:
-  Ensures that the same question is not selected multiple times for the same student.
-
-### 3. Ablation Evaluation
-
-To support research analysis, the framework should compare multiple experimental settings:
-
-- ML-only baseline
-- ML + ZPD
-- ML + Flow
-- ML + ZPD + Flow
-- Rasch / IRT-only cold-start
-- Rasch / IRT + information-based selection
-- Rasch / IRT + information + ZPD / Flow constraints
-- Two-phase pipeline: cold-start diagnosis followed by history-based adaptive practice
-
-The main goal of evaluation is to test whether combining machine learning, psychometric modeling, and educational theory improves adaptive question selection compared with model-only baselines.
-
-
-## Project Structure
-
-```
-pedago_ml/
-├── base/
-│   ├── edu_theory.py         # base edu theory
-│   ├── ml_model.py           # base ML model interface
-│   ├── pipeline.py           # base pipeline interface
-├── features/
-│   ├── dataloader.py         # Data loader components
-│   ├── splitter.py           # Split train/valid/test
-│   └── feature_engineering.py  # Feature engineering components
-├── edu_theory/
-│   ├── zpd.py                # zone of proximal development implement
-│   └── flow_theory.py        # flow theory implementation
-├── ml_models/
-│   ├── xgb.py                # xgb model
-│   ├── ncf.py                # ncf model
-│   └── knowledge_tracing.py  # knowledge tracing
-├── psychometrics/
-│   ├── rasch.py              # rasch model
-│   ├── ability_estimator.py  # ability estimator
-│   └── posterior_updater.py  # posterior updater
-├── pipelines/
-│   ├── history_based.py      # History based pipeline
-│   └── cold_start.py         # Cold start pipeline
-├── evaluation.py             # Evaluation pipeline
-├── factory.py
-└── scoring.py                # Scoring components
-
-pedago_ml_configs/
-├── history_based.yaml    # History based pipeline configuration
-├── cold_start.yaml       # cold-start pipeline configuration
-│
-```
+- The dataset is fixed, so reproducibility and leakage-safe evaluation are more important than general ingestion flexibility.
+- The history-based splitter should not be interpreted as cold-start student generalization; it splits each student's answered questions into observed and hidden portions.
+- Leave-one-out features are used on train rows to reduce target leakage.
+- Validation and test rows only use statistics computed from train data.
+- ZPD / Flow modules should be treated as pedagogical reranking layers, not replacements for the base predictive model.
+- Model-only baselines must always be preserved for ablation comparison.
