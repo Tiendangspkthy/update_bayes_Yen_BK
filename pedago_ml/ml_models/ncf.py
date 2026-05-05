@@ -217,9 +217,11 @@ class NCFModel:
             .astype(np.float32)
             .to_numpy()
         )
-        self.feature_mean = features.mean(axis=0).astype(np.float32)
-        self.feature_std = features.std(axis=0).astype(np.float32)
-        self.feature_std[self.feature_std == 0] = 1.0
+        feature_mean = features.mean(axis=0).astype(np.float32)
+        feature_std = features.std(axis=0).astype(np.float32)
+        feature_std[feature_std == 0] = 1.0
+        self.feature_mean = feature_mean
+        self.feature_std = feature_std
 
     def _encode_features(self, df: pd.DataFrame) -> np.ndarray:
         if not self.feature_columns:
@@ -329,6 +331,8 @@ class NCFModel:
         self._fit_id_mappings(train_df)
         self._fit_feature_scaler(train_df)
         self._init_network()
+        if self.model is None:
+            raise RuntimeError("Model is not initialized.")
 
         params = self.config.model_params
         train_dataset = self._build_dataset(train_df, with_target=True)
@@ -452,6 +456,8 @@ class NCFModel:
         """Save model weights, mappings, scaler, and training history."""
         if self.model is None:
             raise RuntimeError("Model is not fitted.")
+        if self.feature_mean is None or self.feature_std is None:
+            raise RuntimeError("Feature scaler is not fitted.")
 
         path = Path(file_path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -462,16 +468,8 @@ class NCFModel:
             "user_to_idx": self.user_to_idx,
             "item_to_idx": self.item_to_idx,
             "feature_columns": self.feature_columns,
-            "feature_mean": (
-                self.feature_mean.tolist()
-                if hasattr(self.feature_mean, "tolist")
-                else self.feature_mean
-            ),
-            "feature_std": (
-                self.feature_std.tolist()
-                if hasattr(self.feature_std, "tolist")
-                else self.feature_std
-            ),
+            "feature_mean": self.feature_mean.tolist(),
+            "feature_std": self.feature_std.tolist(),
             "history": self.history,
         }
         torch.save(payload, path)
@@ -496,6 +494,8 @@ class NCFModel:
         instance.feature_std = payload["feature_std"]
         instance.history = payload.get("history", [])
         instance._init_network()
+        if instance.model is None:
+            raise RuntimeError("Model is not initialized.")
         instance.model.load_state_dict(payload["state_dict"])
         instance.model.to(instance.device)
         instance.model.eval()
