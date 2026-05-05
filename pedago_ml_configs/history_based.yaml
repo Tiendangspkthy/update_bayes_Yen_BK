@@ -40,7 +40,7 @@ xgb_config:
 
   output:
     score_col: pred_proba
-    prediction_col: pred
+    prediction_col: prediction
     rank_col: rank
 
 ncf_config:
@@ -70,7 +70,7 @@ ncf_config:
 
   output:
     score_col: pred_proba
-    prediction_col: pred
+    prediction_col: prediction
     rank_col: rank
 
 zpd_config:
@@ -97,3 +97,51 @@ zpd_config:
     is_aligned_col: is_zpd_aligned
     adjusted_score_col: zpd_adjusted_score
     rank_col: zpd_rank
+
+flow_config:
+  model_name: flow_theory
+  probability_col: pred_proba
+  base_score_col: null
+
+  model_params:
+    lower_probability: 0.45
+    target_probability: 0.60
+    upper_probability: 0.75
+    min_in_flow_score: 0.7
+    outside_tolerance: 0.25
+    clip_probability: true
+    base_score_weight: 0.5
+    flow_score_weight: 0.5
+
+  output:
+    flow_value_col: flow_value
+    flow_distance_col: flow_distance
+    flow_score_col: flow_score
+    flow_label_col: flow_label
+    is_aligned_col: is_flow_aligned
+    adjusted_score_col: flow_adjusted_score
+    rank_col: flow_rank
+
+flow_theory_config:
+  model_name: flow_theory
+  probability_col: pred_proba
+  base_score_col: null
+
+  model_params:
+    lower_probability: 0.45
+    target_probability: 0.60
+    upper_probability: 0.75
+    min_in_flow_score: 0.7
+    outside_tolerance: 0.25
+    clip_probability: true
+    base_score_weight: 0.5
+    flow_score_weight: 0.5
+
+  output:
+    flow_value_col: flow_value
+    flow_distance_col: flow_distance
+    flow_score_col: flow_score
+    flow_label_col: flow_label
+    is_aligned_col: is_flow_aligned
+    adjusted_score_col: flow_adjusted_score
+    rank_col: flow_rank
