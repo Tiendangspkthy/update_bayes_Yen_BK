@@ -39,9 +39,9 @@ xgb_config:
     n_jobs: -1
 
   output:
-    score_col: xgb_pred_proba
-    prediction_col: xgb_pred
-    rank_col: xgb_rank
+    score_col: pred_proba
+    prediction_col: pred
+    rank_col: rank
 
 ncf_config:
   model_name: ncf
@@ -69,13 +69,13 @@ ncf_config:
     device: auto
 
   output:
-    score_col: ncf_pred_proba
-    prediction_col: ncf_pred
-    rank_col: ncf_rank
+    score_col: pred_proba
+    prediction_col: pred
+    rank_col: rank
 
 zpd_config:
   model_name: zpd
-  probability_col: xgb_pred_proba # or ncf_pred_proba, kt_pred_proba
+  probability_col: pred_proba
   base_score_col: null
 
   model_params:

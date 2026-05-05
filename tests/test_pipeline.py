@@ -8,6 +8,7 @@ from pedago_ml.features.splitter import DataSplitter
 from pedago_ml.ml_models.ncf import NCFModel
 from pedago_ml.ml_models.xgb import XGBModel
 from pedago_ml.utils.config import HistoryBasedPipelineConfig
+from pedago_ml.utils.logger import logger
 
 config = HistoryBasedPipelineConfig.load_config("pedago_ml_configs/history_based.yaml")
 
@@ -56,12 +57,14 @@ class TestPipeline(BaseTest):
         return train_features, val_features, test_features
 
     def xgb_model(self):
-        train_features, _, _ = self.feature_engineer()
+        train_features, val_features, _ = self.feature_engineer()
         xgb_model_config = config.xgb_config
         xgb_model = XGBModel(config=config, model_config=xgb_model_config)
         xgb_model.fit(train_features)
         assert xgb_model is not None
         assert xgb_model.model is not None
+        metrics = xgb_model.evaluate(val_features)
+        assert {"logloss", "accuracy", "f1", "auc"} <= set(metrics.keys())
         return xgb_model
 
     def ncf_model(self):
@@ -82,12 +85,16 @@ class TestPipeline(BaseTest):
         zpd_model = ZPDTheory(config=config, model_config=zpd_model_config)
         ranked = zpd_model.rank_candidates(test_ranked)
         assert ranked is not None
-        assert zpd_model.evaluate_alignment(ranked, top_k=2) is not None
+        alignment = zpd_model.evaluate_alignment(ranked, top_k=2)
+        assert alignment is not None
         return zpd_model
 
     @pytest.mark.order("last")
     def test_pipeline(self):
         xgb_model = self.xgb_model()
-        ncf_model = self.ncf_model()
         zpd_model = self.zpd_model(xgb_model)
+        assert zpd_model is not None
+
+        ncf_model = self.ncf_model()
+        zpd_model = self.zpd_model(ncf_model)
         assert zpd_model is not None

@@ -306,12 +306,16 @@ class ZPDTheory:
         labels = scored_df[self.output.zpd_label_col]
         n_rows = max(len(scored_df), 1)
 
-        return {
+        metrics = {
             "zpd_alignment_rate": float(scored_df[self.output.is_aligned_col].mean()),
             "mean_zpd_score": float(scored_df[self.output.zpd_score_col].mean()),
             "too_hard_rate": float(labels.eq("too_hard").sum() / n_rows),
             "too_easy_rate": float(labels.eq("too_easy").sum() / n_rows),
         }
+        logger.info("=" * 20 + f"ZPD top-{top_k} alignment metrics " + "=" * 20)
+        for key, val in metrics.items():
+            logger.info("{:<20}: {}".format(key, val))
+        return metrics
 
 
 if __name__ == "__main__":
