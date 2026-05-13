@@ -1,20 +1,26 @@
 import math
-from dataclasses import dataclass
-from typing import Any, Callable, Literal, Optional, Tuple, Union, cast
+from typing import Any, Literal, Mapping, Optional, Union, cast
 
 import optuna
 import pandas as pd
-from optuna.samplers import TPESampler
 
 from pedago_ml.base.ml_model import BaseMLModel
+from pedago_ml.base.tuning import (
+    TuningResult,
+    get_subconfig,
+    merge_params,
+    metric_from_eval,
+    sampler,
+    suggest_one,
+)
 from pedago_ml.edu_theory.zpd import ZPDTheory
 from pedago_ml.ml_models.knowledge_tracing import KnowledgeTracingModel
 from pedago_ml.ml_models.ncf import NCFModel
 from pedago_ml.ml_models.xgb import XGBModel
-from pedago_ml.tuning.hyperparameter_suggester import HyperparameterSuggester
 from pedago_ml.utils.config import (
     HistoryBasedPipelineConfig,
     KnowledgeTracingModelConfig,
+    ModelSearchSpaceEntry,
     ModelTuningConfig,
     NCFModelConfig,
     XGBModelConfig,
@@ -24,80 +30,15 @@ ModelConfig = Union[XGBModelConfig, NCFModelConfig, KnowledgeTracingModelConfig]
 ModelKey = Literal["xgb", "ncf", "knowledge_tracing"]
 
 
-def _coerce_study_param_value(value: Any) -> Any:
-    """Optuna may return tuples for categorical lists; pydantic expects lists."""
-    if isinstance(value, tuple):
-        return [_coerce_study_param_value(v) for v in value]
-    return value
-
-
-def _normalize_metric(metric: str) -> str:
-    """Normalize metric keys to a consistent lookup form."""
-    return metric.strip().lower().replace("-", "_")
-
-
-def _metric_from_eval(metrics: dict[str, float], tuning: ModelTuningConfig) -> float:
-    """Extract the tuned objective value from a model's ``evaluate`` output."""
-    name = tuning.metric
-    normalized = {_normalize_metric(k): v for k, v in metrics.items()}
-    lookup = _normalize_metric(name)
-
-    if lookup in normalized:
-        return float(normalized[lookup])
-
-    if lookup in {"log_loss", "logloss", "cross_entropy"}:
-        for alias in ("log_loss", "logloss"):
-            if alias in normalized:
-                return float(normalized[alias])
-    raise KeyError(f"Metric '{name}' not in evaluation output {list(metrics.keys())}")
-
-
-def _sampler(tuning: ModelTuningConfig) -> optuna.samplers.BaseSampler:
-    """Create an Optuna sampler honoring the tuning seed (if provided)."""
-    if tuning.seed is not None:
-        return TPESampler(seed=tuning.seed)
-    return TPESampler()
-
-
-def _get_subconfig(
-    pipeline_config: HistoryBasedPipelineConfig, model_key: ModelKey
-) -> Tuple[ModelConfig, Callable[..., Any], bool]:
-    """Return (model_config, model_class, needs_val_fit) for a given model key."""
-    if model_key == "xgb":
-        return pipeline_config.xgb_config, cast(Callable[..., Any], XGBModel), False
-    if model_key == "ncf":
-        return pipeline_config.ncf_config, cast(Callable[..., Any], NCFModel), True
-    if model_key == "knowledge_tracing":
-        return (
-            pipeline_config.knowledge_tracing_config,
-            cast(Callable[..., Any], KnowledgeTracingModel),
-            False,
-        )
-    raise ValueError(f"Unknown model_key: {model_key}")
-
-
-def _merge_params(mc: ModelConfig, trial_params: dict[str, Any]) -> ModelConfig:
-    """Return a copy of ``mc`` with ``model_params`` updated by trial values."""
-    dumped = mc.model_params.model_dump()
-    for k, v in trial_params.items():
-        if k not in dumped:
-            raise ValueError(
-                f"Unknown tuned field '{k}' for {mc.model_name}. "
-                f"Valid keys include: {sorted(dumped)!r}"
-            )
-        dumped[k] = _coerce_study_param_value(v)
-    params_cls = type(mc.model_params)
-    merged_params = params_cls(**dumped)
-    return mc.model_copy(deep=True, update={"model_params": merged_params})
-
-
-@dataclass(frozen=True)
-class TuningResult:
-    """Outcome of ``run_model_tuning``."""
-
-    study: optuna.Study
-    model_config: ModelConfig
-    best_metric: float
+def suggest_all(
+    trial: optuna.Trial,
+    search_space: Mapping[str, ModelSearchSpaceEntry],
+) -> dict[str, Any]:
+    """Suggest a full dict of param_name -> sampled value for one Optuna trial."""
+    suggested: dict[str, Any] = {}
+    for name, entry in search_space.items():
+        suggested[name] = suggest_one(trial, name, entry)
+    return suggested
 
 
 def run_model_tuning(
@@ -113,7 +54,7 @@ def run_model_tuning(
 
     If ``tuning_override`` is set, it replaces the block from YAML for this run.
     """
-    base_mc, model_cls, needs_val_fit = _get_subconfig(pipeline_config, model_key)
+    base_mc, model_cls, needs_val_fit = get_subconfig(pipeline_config, model_key)
     tuning = tuning_override or base_mc.tuning
     if tuning is None or not tuning.enabled:
         raise ValueError(
@@ -123,11 +64,9 @@ def run_model_tuning(
     if not tuning.search_space:
         raise ValueError("tuning.search_space must not be empty")
 
-    suggester = HyperparameterSuggester()
-
     def objective(trial: optuna.Trial) -> float:
-        trial_params = suggester.suggest_all(trial, tuning.search_space)
-        model_config_trial = _merge_params(base_mc, trial_params)
+        trial_params = suggest_all(trial=trial, search_space=tuning.search_space)
+        model_config_trial = merge_params(base_mc, trial_params)
         model = model_cls(config=pipeline_config, model_config=model_config_trial)
         if needs_val_fit:
             if not isinstance(model, NCFModel):
@@ -139,7 +78,7 @@ def run_model_tuning(
         else:
             model.fit(train_df)
         metrics = model.evaluate(val_df)
-        value = _metric_from_eval(metrics, tuning)
+        value = metric_from_eval(metrics, tuning)
         if math.isnan(value):
             raise optuna.TrialPruned()
         return value
@@ -147,12 +86,12 @@ def run_model_tuning(
     study = optuna.create_study(
         direction=tuning.direction,
         study_name=tuning.study_name,
-        sampler=_sampler(tuning),
+        sampler=sampler(tuning),
     )
     study.optimize(objective, n_trials=tuning.n_trials)
 
     best_params = study.best_params
-    best_mc = _merge_params(base_mc, best_params)
+    best_mc = merge_params(base_mc, best_params)
     best_metric = float(study.best_value)
 
     return TuningResult(study=study, model_config=best_mc, best_metric=best_metric)
