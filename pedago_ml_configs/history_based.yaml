@@ -39,7 +39,7 @@ xgb_config:
     n_jobs: -1
 
   tuning:
-    enabled: false
+    enabled: true
     n_trials: 2
     study_name: xgb_hyperparameter_tuning
     direction: maximize

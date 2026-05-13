@@ -52,6 +52,9 @@ def suggest_one(
 ) -> Any:
     """Sample a single parameter from ``entry``."""
     if entry.type == "float":
+        if entry.low is None or entry.high is None:
+            raise ValueError(f"Float parameter '{param_name}' requires low/high")
+
         low, high = float(entry.low), float(entry.high)
 
         if entry.distribution == "loguniform":
@@ -59,6 +62,9 @@ def suggest_one(
         return trial.suggest_float(param_name, low, high, log=False)
 
     if entry.type == "int":
+        if entry.low is None or entry.high is None:
+            raise ValueError(f"Int parameter '{param_name}' requires low/high")
+
         low_i = int(entry.low)
         high_i = int(entry.high)
 

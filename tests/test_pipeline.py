@@ -10,7 +10,7 @@ from pedago_ml.features.splitter import DataSplitter
 from pedago_ml.ml_models.knowledge_tracing import KnowledgeTracingModel
 from pedago_ml.ml_models.ncf import NCFModel
 from pedago_ml.ml_models.xgb import XGBModel
-from pedago_ml.tuning.trial_executor import run_xgb_tuning
+from pedago_ml.tuning import run_xgb_tuning
 from pedago_ml.utils.config import HistoryBasedPipelineConfig
 
 config = HistoryBasedPipelineConfig.load_config("pedago_ml_configs/history_based.yaml")
