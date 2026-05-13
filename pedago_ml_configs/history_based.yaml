@@ -38,6 +38,35 @@ xgb_config:
     random_state: 12
     n_jobs: -1
 
+  tuning:
+    enabled: true
+    n_trials: 5
+    study_name: xgb_hyperparameter_tuning
+    direction: maximize
+    metric: f1
+    seed: 12
+    search_space:
+      learning_rate:
+        type: float
+        distribution: loguniform
+        low: 1.0e-5
+        high: 1.0e-2
+      max_depth:
+        type: int
+        distribution: uniform
+        low: 2
+        high: 10
+      min_child_weight:
+        type: float
+        distribution: uniform
+        low: 1.0
+        high: 10.0
+      subsample:
+        type: float
+        distribution: uniform
+        low: 0.6
+        high: 1.0
+
   output:
     score_col: pred_proba
     prediction_col: prediction
@@ -68,6 +97,43 @@ ncf_config:
     random_state: 12
     device: auto
 
+  tuning:
+    enabled: true
+    n_trials: 5
+    study_name: ncf_hyperparameter_tuning
+    direction: maximize
+    metric: f1
+    seed: 12
+    search_space:
+      embedding_dim:
+        type: int
+        distribution: uniform
+        low: 8
+        high: 64
+      dropout:
+        type: float
+        distribution: uniform
+        low: 0.0
+        high: 0.5
+      learning_rate:
+        type: float
+        distribution: loguniform
+        low: 1.0e-4
+        high: 1.0e-2
+      batch_size:
+        type: categorical
+        choices:
+          - 128
+          - 256
+          - 512
+      hidden_dims:
+        type: categorical
+        choices:
+          - [32, 16]
+          - [64, 32]
+          - [128, 64]
+          - [256, 128, 64]
+
   output:
     score_col: pred_proba
     prediction_col: prediction
@@ -92,6 +158,40 @@ knowledge_tracing_config:
     category_aggregation: mean
     item_accuracy_col: item_accuracy
     clip_probability: true
+
+  tuning:
+    enabled: true
+    n_trials: 40
+    study_name: kt_hyperparameter_tuning
+    direction: minimize
+    metric: log_loss
+    seed: 12
+    search_space:
+      alpha:
+        type: float
+        distribution: loguniform
+        low: 0.1
+        high: 5.0
+      beta:
+        type: float
+        distribution: loguniform
+        low: 0.1
+        high: 5.0
+      w0:
+        type: float
+        distribution: uniform
+        low: -2.0
+        high: 2.0
+      w1:
+        type: float
+        distribution: uniform
+        low: 0.5
+        high: 6.0
+      w2:
+        type: float
+        distribution: uniform
+        low: 0.0
+        high: 6.0
 
   output:
     score_col: pred_proba

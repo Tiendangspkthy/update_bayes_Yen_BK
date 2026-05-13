@@ -2,10 +2,10 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Type, TypeVar, Union
+from typing import Any, Dict, List, Literal, Optional, Type, TypeVar, Union
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 ENV_PATTERN = re.compile(r"\$\{(\w+)\}")
 
@@ -66,6 +66,44 @@ class MLModelOutputConfig(BaseModel):
     rank_col: str = "rank"
 
 
+class ModelSearchSpaceEntry(BaseModel):
+    type: Literal["float", "int", "categorical"]
+    distribution: Literal["uniform", "loguniform"] = "uniform"
+    low: Optional[float] = None
+    high: Optional[float] = None
+    choices: Optional[List[Any]] = None
+
+    @model_validator(mode="after")
+    def _validate_by_type(self) -> "ModelSearchSpaceEntry":
+        if self.type in ("float", "int"):
+            if self.low is None or self.high is None:
+                raise ValueError(
+                    f"Search space '{self.type}' parameters require " "'low' and 'high'"
+                )
+            if self.low >= self.high:
+                raise ValueError("'low' must be < 'high'")
+            if self.distribution == "loguniform" and self.low <= 0:
+                raise ValueError("'loguniform' requires low > 0")
+            if self.choices is not None:
+                raise ValueError("Numeric search space entries must not set 'choices'")
+        else:
+            if not self.choices:
+                raise ValueError("categorical entries require non-empty 'choices'")
+            if self.low is not None or self.high is not None:
+                raise ValueError("categorical entries must not set 'low'/'high'")
+        return self
+
+
+class ModelTuningConfig(BaseModel):
+    enabled: bool = False
+    n_trials: int = 20
+    study_name: str = "hyperparameter_tuning"
+    direction: Literal["minimize", "maximize"] = "minimize"
+    metric: str = "logloss"
+    seed: Optional[int] = None
+    search_space: Dict[str, ModelSearchSpaceEntry] = Field(default_factory=dict)
+
+
 class XGBParamsConfig(BaseModel):
     n_estimators: int = 300
     max_depth: int = 3
@@ -89,6 +127,7 @@ class XGBModelConfig(BaseConfig):
     feature_columns: Optional[list[str]] = None
 
     model_params: XGBParamsConfig = XGBParamsConfig()
+    tuning: Optional[ModelTuningConfig] = None
     output: MLModelOutputConfig = MLModelOutputConfig()
 
 
@@ -115,6 +154,7 @@ class NCFModelConfig(BaseConfig):
     feature_columns: Optional[list[str]] = None
 
     model_params: NCFParamsConfig = NCFParamsConfig()
+    tuning: Optional[ModelTuningConfig] = None
     output: MLModelOutputConfig = MLModelOutputConfig()
 
 
@@ -146,6 +186,7 @@ class KnowledgeTracingModelConfig(BaseConfig):
     threshold: float = 0.5
     probability_col: Optional[str] = None
     model_params: KnowledgeTracingParamsConfig = KnowledgeTracingParamsConfig()
+    tuning: Optional[ModelTuningConfig] = None
     output: MLModelOutputConfig = MLModelOutputConfig()
 
 
