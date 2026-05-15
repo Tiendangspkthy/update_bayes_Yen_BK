@@ -7,7 +7,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.metrics import accuracy_score, log_loss, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    log_loss,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
@@ -440,6 +447,9 @@ class NCFModel(BaseMLModel):
         metrics = {
             "log_loss": float(log_loss(y_true, y_proba, labels=[0, 1])),
             "accuracy": float(accuracy_score(y_true, y_pred)),
+            "recall": float(recall_score(y_true, y_pred, zero_division=0)),
+            "precision": float(precision_score(y_true, y_pred, zero_division=0)),
+            "f1": float(f1_score(y_true, y_pred, zero_division=0)),
         }
 
         if len(np.unique(y_true)) == 2:

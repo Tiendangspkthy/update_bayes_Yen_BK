@@ -1,3 +1,4 @@
+import optuna
 import pytest
 from conftest import BaseTest
 
@@ -9,6 +10,7 @@ from pedago_ml.features.splitter import DataSplitter
 from pedago_ml.ml_models.knowledge_tracing import KnowledgeTracingModel
 from pedago_ml.ml_models.ncf import NCFModel
 from pedago_ml.ml_models.xgb import XGBModel
+from pedago_ml.tuning import run_xgb_tuning
 from pedago_ml.utils.config import HistoryBasedPipelineConfig
 
 config = HistoryBasedPipelineConfig.load_config("pedago_ml_configs/history_based.yaml")
@@ -124,6 +126,28 @@ class TestPipeline(BaseTest):
             "under_challenged_rate",
         } <= set(alignment.keys())
         return flow_model
+
+    def test_tuning(self):
+        train_features, val_features, _ = self.feature_engineer()
+        xgb_model = self.xgb_model()
+        ncf_model = self.ncf_model()
+        kt_model = self.knowledge_tracing_model()
+        zpd_model = self.zpd_model(xgb_model)
+        flow_model = self.flow_model(xgb_model)
+        assert zpd_model is not None
+        assert flow_model is not None
+        assert ncf_model is not None
+        assert kt_model is not None
+
+        result = run_xgb_tuning(
+            config,
+            train_features,
+            val_features,
+            tuning_override=config.xgb_config.tuning,
+        )
+        assert isinstance(result.study, optuna.Study)
+        assert result.best_metric is not None
+        assert result.model_config.model_params is not None
 
     @pytest.mark.order("last")
     def test_pipeline(self):
