@@ -98,7 +98,7 @@ ncf_config:
     device: auto
 
   tuning:
-    enabled: true
+    enabled: false  # false auto load from checkpoint; use --params-source config to run model params
     n_trials: 50
     study_name: ncf_hyperparameter_tuning
     direction: maximize
