@@ -1,4 +1,6 @@
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal, Tuple, Union
 
 import optuna
@@ -28,6 +30,16 @@ class TuningResult:
     study: optuna.Study
     model_config: ModelConfig
     best_metric: float
+
+
+@dataclass(frozen=True)
+class SavedTuningCheckpoint:
+    """Best hyperparameters loaded from a previous tuning run on disk."""
+
+    model_config: ModelConfig
+    best_metric: float
+    source_path: Path
+    model_key: ModelKey
 
 
 def _make_hashable(x: Any) -> Any:
@@ -124,6 +136,77 @@ def get_subconfig(
     if model_key == "knowledge_tracing":
         return pipeline_config.knowledge_tracing_config, KnowledgeTracingModel, False
     raise ValueError(f"Unknown model_key: {model_key}")
+
+
+def tuning_checkpoint_payload(
+    model_key: ModelKey,
+    model_config: ModelConfig,
+    best_metric: float,
+    *,
+    study: optuna.Study | None = None,
+) -> dict[str, Any]:
+    """Serialize tuning outcome for ``tuning_result.json``."""
+    payload: dict[str, Any] = {
+        "model_key": model_key,
+        "best_metric": best_metric,
+        "best_params": model_config.model_params.model_dump(),
+    }
+    if study is not None:
+        payload["study_name"] = study.study_name
+        payload["direction"] = study.direction.name
+        payload["n_trials"] = len(study.trials)
+    return payload
+
+
+def save_tuning_checkpoint(
+    path: Path,
+    model_key: ModelKey,
+    model_config: ModelConfig,
+    best_metric: float,
+    *,
+    study: optuna.Study | None = None,
+) -> None:
+    """Persist best hyperparameters to ``tuning_result.json``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = tuning_checkpoint_payload(
+        model_key, model_config, best_metric, study=study
+    )
+    with path.open("w", encoding="utf-8") as checkpoint_file:
+        json.dump(payload, checkpoint_file, indent=2)
+
+
+def load_tuning_checkpoint(
+    path: Path,
+    pipeline_config: HistoryBasedPipelineConfig,
+    model_key: ModelKey,
+) -> SavedTuningCheckpoint:
+    """Load ``tuning_result.json`` and merge best_params into the base model config."""
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Tuning checkpoint not found: {path}. "
+            f"Run with --params-source tune first, or use --params-source config."
+        )
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    checkpoint_model_key = data.get("model_key")
+    if checkpoint_model_key != model_key:
+        raise ValueError(
+            f"Checkpoint model_key={checkpoint_model_key!r} does not match "
+            f"requested model_key={model_key!r} ({path})"
+        )
+
+    best_params = data.get("best_params")
+    if not isinstance(best_params, dict) or not best_params:
+        raise ValueError(f"Invalid or empty best_params in {path}")
+
+    base_model_config, _, _ = get_subconfig(pipeline_config, model_key)
+    merged_config = merge_params(base_model_config, best_params)
+    return SavedTuningCheckpoint(
+        model_config=merged_config,
+        best_metric=float(data["best_metric"]),
+        source_path=path.resolve(),
+        model_key=model_key,
+    )
 
 
 def merge_params(mc: ModelConfig, trial_params: dict[str, Any]) -> ModelConfig:
