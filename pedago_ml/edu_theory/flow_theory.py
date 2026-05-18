@@ -71,29 +71,17 @@ class FlowTheory(BaseEduTheory):
         lower: float,
         target: float,
         upper: float,
+        min_in_zone_score: float,
+        outside_tolerance: float,
     ) -> np.ndarray:
-        eps = 1e-8
-        min_score = self.params.min_in_flow_score
-        outside_tolerance = self.params.outside_tolerance
-
-        left_width = max(target - lower, eps)
-        right_width = max(upper - target, eps)
-
-        center_width = np.where(values <= target, left_width, right_width)
-        center_distance = np.abs(values - target) / center_width
-        in_flow_score = 1.0 - (1.0 - min_score) * np.clip(center_distance, 0.0, 1.0)
-
-        below_distance = np.maximum(lower - values, 0.0) / outside_tolerance
-        above_distance = np.maximum(values - upper, 0.0) / outside_tolerance
-        below_score = min_score * (1.0 - below_distance)
-        above_score = min_score * (1.0 - above_distance)
-
-        score = np.where(
-            values < lower,
-            below_score,
-            np.where(values > upper, above_score, in_flow_score),
+        return super()._bounded_linear_score(
+            values=values,
+            lower=lower,
+            target=target,
+            upper=upper,
+            min_in_zone_score=min_in_zone_score,
+            outside_tolerance=outside_tolerance,
         )
-        return np.clip(score, 0.0, 1.0).astype(np.float32)
 
     def _make_labels(self, proba: np.ndarray) -> np.ndarray:
         labels = np.full(len(proba), "in_flow", dtype=object)
@@ -130,6 +118,8 @@ class FlowTheory(BaseEduTheory):
             lower=self.params.lower_probability,
             target=self.params.target_probability,
             upper=self.params.upper_probability,
+            min_in_zone_score=self.params.min_in_flow_score,
+            outside_tolerance=self.params.outside_tolerance,
         )
         out[self.output.flow_label_col] = self._make_labels(proba)
         out[self.output.is_aligned_col] = out[self.output.flow_label_col].eq("in_flow")
