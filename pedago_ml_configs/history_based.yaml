@@ -40,7 +40,7 @@ xgb_config:
 
   tuning:
     enabled: true
-    n_trials: 2
+    n_trials: 5
     study_name: xgb_hyperparameter_tuning
     direction: maximize
     metric: f1
@@ -99,7 +99,7 @@ ncf_config:
 
   tuning:
     enabled: true
-    n_trials: 2
+    n_trials: 50
     study_name: ncf_hyperparameter_tuning
     direction: maximize
     metric: f1
