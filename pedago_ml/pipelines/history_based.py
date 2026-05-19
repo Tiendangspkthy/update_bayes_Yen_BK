@@ -29,7 +29,11 @@ from pedago_ml.utils.config import (
     HistoryBasedPipelineConfig,
     ZPDTheoryConfig,
 )
-from pedago_ml.utils.logger import logger
+from pedago_ml.utils.logger import (
+    add_pipeline_file_log,
+    logger,
+    remove_pipeline_file_log,
+)
 
 DEFAULT_OUTPUT_DIR = Path("outputs/history_based")
 LOG_FILENAME = "pipeline.log"
@@ -46,25 +50,6 @@ def _prefix_metrics(metrics: dict[str, float], prefix: str) -> dict[str, float]:
 
 def _output_path(output_dir: Path | str, model_key: str) -> Path:
     return Path(output_dir) / model_key
-
-
-def add_pipeline_file_log(log_path: Path) -> int:
-    """Attach a loguru file sink; returns sink id for later removal."""
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    return logger.add(
-        str(log_path),
-        format=(
-            "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
-            "{name}:{function}:{line} - {message}"
-        ),
-        level="INFO",
-        encoding="utf-8",
-    )
-
-
-def remove_pipeline_file_log(sink_id: int) -> None:
-    """Remove a file sink previously added by add_pipeline_file_log."""
-    logger.remove(sink_id)
 
 
 @dataclass(frozen=True)
