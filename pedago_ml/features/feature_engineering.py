@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from pedago_ml.utils.config import BasePipelineConfig
+from pedago_ml.utils.config import HistoryBasedPipelineConfig
 from pedago_ml.utils.logger import logger
 
 
@@ -13,7 +13,7 @@ class FeatureEngineer:
     - Val/Test: use full-train aggregates only.
     """
 
-    def __init__(self, config: BasePipelineConfig):
+    def __init__(self, config: HistoryBasedPipelineConfig):
         self.config = config
 
         self.student_col = config.user_id

@@ -35,3 +35,25 @@ class Logger(metaclass=SingletonMeta):
 
 
 logger = Logger().get_logger()
+
+
+def add_pipeline_file_log(log_path) -> int:
+    """Attach a loguru file sink; returns sink id for later removal."""
+    from pathlib import Path
+
+    log_path = Path(log_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    return logger.add(
+        str(log_path),
+        format=(
+            "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
+            "{name}:{function}:{line} - {message}"
+        ),
+        level="INFO",
+        encoding="utf-8",
+    )
+
+
+def remove_pipeline_file_log(sink_id: int) -> None:
+    """Remove a file sink previously added by add_pipeline_file_log."""
+    logger.remove(sink_id)

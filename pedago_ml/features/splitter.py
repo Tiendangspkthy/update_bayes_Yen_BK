@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
-from pedago_ml.utils.config import BasePipelineConfig
+from pedago_ml.utils.config import HistoryBasedPipelineConfig
 
 RANDOM_STATE = 12
 
@@ -12,7 +12,7 @@ RANDOM_STATE = 12
 class DataSplitter:
     """Split data into train/val/test sets with student-level grouping and encoding."""
 
-    def __init__(self, config: BasePipelineConfig):
+    def __init__(self, config: HistoryBasedPipelineConfig):
         self.config = config
         self.train_ratio = config.splitter.train_ratio
         self.val_ratio = config.splitter.val_ratio
