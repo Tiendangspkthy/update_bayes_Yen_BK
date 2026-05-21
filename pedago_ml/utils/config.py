@@ -268,8 +268,6 @@ class BasePipelineConfig(BaseConfig):
     item_id: str
     target: str
     item_features: list[ItemFeatureConfig]
-    splitter: SplitterConfig
-    smoothing: int
 
     @classmethod
     def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
@@ -280,6 +278,8 @@ class BasePipelineConfig(BaseConfig):
 
 
 class HistoryBasedPipelineConfig(BasePipelineConfig):
+    splitter: SplitterConfig
+    smoothing: int
     xgb_config: XGBModelConfig = XGBModelConfig()
     ncf_config: NCFModelConfig = NCFModelConfig()
     zpd_config: ZPDTheoryConfig = ZPDTheoryConfig()
@@ -287,6 +287,112 @@ class HistoryBasedPipelineConfig(BasePipelineConfig):
     knowledge_tracing_config: KnowledgeTracingModelConfig = (
         KnowledgeTracingModelConfig()
     )
+
+
+class RaschParamsConfig(BaseModel):
+    max_iter: int = 100
+    tol: float = 1e-4
+    difficulty_prior_std: float = 2.0
+    clip_difficulty: float = 6.0
+
+
+class RaschOutputConfig(BaseModel):
+    score_col: str = "rasch_pred_proba"
+    prediction_col: str = "rasch_prediction"
+    rank_col: str = "rasch_rank"
+    difficulty_col: str = "item_difficulty"
+
+
+class RaschModelConfig(BaseConfig):
+    model_name: str = "rasch"
+    threshold: float = 0.5
+    ability_col: str = "ability"
+    model_params: RaschParamsConfig = RaschParamsConfig()
+    tuning: Optional[ModelTuningConfig] = None
+    output: RaschOutputConfig = RaschOutputConfig()
+
+
+class GridPosteriorConfig(BaseModel):
+    theta_min: float = -4.0
+    theta_max: float = 4.0
+    n_grid: int = 81
+    prior_mean: float = 0.0
+    prior_std: float = 1.0
+    estimator: Literal["mean", "map"] = "mean"
+
+
+class SimilarityPenaltyConfig(BaseModel):
+    topic_weight: float = 0.5
+    category_weight: float = 0.5
+    recent_window: int = 3
+    lambda_penalty: float = 0.3
+
+
+class ColdStartZPDConfig(BaseModel):
+    """Hard ZPD band on expected response probability P(correct | posterior)."""
+
+    lower_probability: float = 0.55
+    target_probability: float = 0.65
+    upper_probability: float = 0.75
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "ColdStartZPDConfig":
+        lower = float(self.lower_probability)
+        target = float(self.target_probability)
+        upper = float(self.upper_probability)
+        if not (lower <= target <= upper):
+            raise ValueError(
+                "ZPD bounds must satisfy lower_probability <= "
+                "target_probability <= upper_probability"
+            )
+        return self
+
+
+class ColdStartSelectorConfig(BaseModel):
+    info_weight: float = 0.5
+    zpd: ColdStartZPDConfig = ColdStartZPDConfig()
+    similarity: SimilarityPenaltyConfig = SimilarityPenaltyConfig()
+
+
+class StoppingConfig(BaseModel):
+    min_questions: int = 3
+    max_questions: int = 7
+    variance_threshold: float = 0.25
+
+    @model_validator(mode="after")
+    def validate_thresholds(self) -> "StoppingConfig":
+        if self.min_questions < 1:
+            raise ValueError("min_questions must be >= 1")
+        if self.max_questions < self.min_questions:
+            raise ValueError("max_questions must be >= min_questions")
+        if self.variance_threshold <= 0:
+            raise ValueError("variance_threshold must be > 0")
+        return self
+
+
+class ColdStartSplitterConfig(BaseModel):
+    calibration_ratio: float = 0.8
+    eval_ratio: float = 0.2
+    seed: int = 12
+
+    @model_validator(mode="after")
+    def validate_ratio_sum(self) -> "ColdStartSplitterConfig":
+        total = float(self.calibration_ratio + self.eval_ratio)
+        if abs(total - 1.0) > 1e-8:
+            raise ValueError("calibration_ratio + eval_ratio must equal 1.0")
+        return self
+
+
+class ColdStartPipelineConfig(BasePipelineConfig):
+    output_dir: Path = Path("outputs/cold_start")
+    log_filename: str = "pipeline.log"
+    run_info_filename: str = "run_info.json"
+
+    cold_start_splitter: ColdStartSplitterConfig = ColdStartSplitterConfig()
+    rasch_config: RaschModelConfig = RaschModelConfig()
+    posterior_config: GridPosteriorConfig = GridPosteriorConfig()
+    selector_config: ColdStartSelectorConfig = ColdStartSelectorConfig()
+    stopping_config: StoppingConfig = StoppingConfig()
 
 
 def load_data_from_file(config_path: Path) -> Dict[str, Any]:

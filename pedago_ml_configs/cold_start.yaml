@@ -1,0 +1,57 @@
+interaction_data_path: "data/full_data.csv"
+item_data_path: "data/item_specification.csv"
+
+user_id: "StudentID"
+item_id: "QuestionID"
+target: "Result"
+
+item_features:
+  - name: "Level"
+    type: "categorical"
+  - name: "Topic"
+    type: "categorical"
+
+cold_start_splitter:
+  calibration_ratio: 0.8
+  eval_ratio: 0.2
+  seed: 12
+
+rasch_config:
+  model_name: rasch
+  threshold: 0.5
+  ability_col: ability
+  model_params:
+    max_iter: 100
+    tol: 1.0e-4
+    difficulty_prior_std: 2.0
+    clip_difficulty: 6.0
+  output:
+    score_col: rasch_pred_proba
+    prediction_col: rasch_prediction
+    rank_col: rasch_rank
+    difficulty_col: item_difficulty
+
+posterior_config:
+  theta_min: -4.0
+  theta_max: 4.0
+  n_grid: 81
+  prior_mean: 0.0
+  prior_std: 1.0
+  estimator: mean
+
+selector_config:
+  info_weight: 1.0
+  zpd:
+    lower_probability: 0.55
+    target_probability: 0.65
+    upper_probability: 0.75
+  similarity:
+    topic_weight: 0.5
+    category_weight: 0.5
+    recent_window: 3
+    lambda_penalty: 0.3
+
+stopping_config:
+  min_questions: 3
+  max_questions: 10
+  variance_threshold: 0.25

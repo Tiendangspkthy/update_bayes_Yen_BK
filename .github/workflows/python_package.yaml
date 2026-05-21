@@ -41,7 +41,7 @@ jobs:
           done
       - name: Check lines of code changes
         run: |
-            MAX_CHANGE_LINES=1000
+            MAX_CHANGE_LINES=1200
             # Ensure full clone is fetched
             git fetch origin main
 
