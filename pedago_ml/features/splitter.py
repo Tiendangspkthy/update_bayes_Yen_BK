@@ -4,9 +4,34 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
-from pedago_ml.utils.config import HistoryBasedPipelineConfig
+from pedago_ml.utils.config import ColdStartPipelineConfig, HistoryBasedPipelineConfig
 
 RANDOM_STATE = 12
+
+
+class ColdStartSplitter:
+    """
+    Split students into calibration and evaluation sets for cold-start generalization.
+    """
+
+    def __init__(self, config: ColdStartPipelineConfig) -> None:
+        self.config = config
+        self.user_id = config.user_id
+        self.calibration_ratio = config.cold_start_splitter.calibration_ratio
+        self.seed = config.cold_start_splitter.seed
+
+    def run(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Split students into calibration and evaluation dataframes."""
+        students = df[self.user_id].dropna().unique()
+        rng = np.random.default_rng(self.seed)
+        shuffled = rng.permutation(students)
+        n_calib = int(len(shuffled) * self.calibration_ratio)
+        calib_students = set(shuffled[:n_calib].tolist())
+        calibration_df = df[df[self.user_id].isin(calib_students)].reset_index(
+            drop=True
+        )
+        eval_df = df[~df[self.user_id].isin(calib_students)].reset_index(drop=True)
+        return calibration_df, eval_df
 
 
 class DataSplitter:
