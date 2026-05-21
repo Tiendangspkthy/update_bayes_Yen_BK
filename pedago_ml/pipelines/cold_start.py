@@ -21,24 +21,14 @@ from pedago_ml.utils.logger import (
     remove_pipeline_file_log,
 )
 
-DEFAULT_OUTPUT_DIR = Path("outputs/cold_start")
-DEFAULT_CONFIG_PATH = "pedago_ml_configs/cold_start.yaml"
-LOG_FILENAME = "pipeline.log"
-RUN_INFO_FILENAME = "run_info.json"
-
 
 class ColdStartPipeline(BasePipeline[ColdStartPipelineConfig]):
     """Cold-start diagnostic pipeline for new students."""
 
-    def __init__(
-        self,
-        config: ColdStartPipelineConfig,
-        *,
-        output_dir: Path | str = DEFAULT_OUTPUT_DIR,
-    ) -> None:
+    def __init__(self, config: ColdStartPipelineConfig) -> None:
         super().__init__(config=config)
         self.config = config
-        self.output_dir = Path(output_dir)
+        self.output_dir = self.config.output_dir
         self.data_loader = DataLoader(config=config)
         self.splitter = ColdStartSplitter(config=config)
         self.selector = ColdStartSelector(
@@ -82,7 +72,9 @@ class ColdStartPipeline(BasePipeline[ColdStartPipelineConfig]):
             "n_step_rows": len(artifacts.extras["step_trace_df"]),
         }
 
-        with (out_path / RUN_INFO_FILENAME).open("w", encoding="utf-8") as f:
+        with (out_path / self.config.run_info_filename).open(
+            "w", encoding="utf-8"
+        ) as f:
             json.dump(run_info, f, indent=2)
 
         with (out_path / "eval_metrics.json").open("w", encoding="utf-8") as f:
@@ -282,63 +274,30 @@ class ColdStartPipeline(BasePipeline[ColdStartPipelineConfig]):
 
 
 if __name__ == "__main__":
-    import argparse
+    DEFAULT_CONFIG_PATH = "pedago_ml_configs/cold_start.yaml"
+    pipeline_config = ColdStartPipelineConfig.load_config(DEFAULT_CONFIG_PATH)
+    pipeline = ColdStartPipeline(pipeline_config)
 
-    parser = argparse.ArgumentParser(
-        description="Run the cold-start diagnostic question-selection pipeline."
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        default=DEFAULT_CONFIG_PATH,
-        help="Pipeline YAML path",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default=str(DEFAULT_OUTPUT_DIR),
-        help="Directory for pipeline outputs",
-    )
-    cli_args = parser.parse_args()
-
-    pipeline_config = ColdStartPipelineConfig.load_config(cli_args.config)
-    pipeline = ColdStartPipeline(
-        pipeline_config,
-        output_dir=cli_args.output_dir,
-    )
-
-    out_path = pipeline.output_path()
-    log_sink_id = add_pipeline_file_log(out_path / LOG_FILENAME)
-
-    logger.info("Cold-start pipeline")
-    logger.info("Config: {}", cli_args.config)
-    logger.info("Output dir: {}", out_path)
-    logger.info(
-        "Splitter: calibration_ratio={}, seed={}",
-        pipeline_config.cold_start_splitter.calibration_ratio,
-        pipeline_config.cold_start_splitter.seed,
-    )
-    logger.info(
-        "Stopping: min={}, max={}, variance_threshold={}",
-        pipeline_config.stopping_config.min_questions,
-        pipeline_config.stopping_config.max_questions,
-        pipeline_config.stopping_config.variance_threshold,
-    )
+    out_path = pipeline_config.output_dir
+    log_filename = out_path / pipeline_config.log_filename
+    log_sink_id = add_pipeline_file_log(log_filename)
 
     try:
         artifacts = pipeline.run()
-        saved_dir = pipeline.save_outputs(artifacts)
+        saved_dir = pipeline.save_outputs(
+            artifacts, output_dir=pipeline_config.output_dir
+        )
 
         summary_df = artifacts.extras["student_summary_df"]
         trace_df = artifacts.extras["step_trace_df"]
 
-        logger.info("Saved outputs to {}", saved_dir)
+        logger.info("Saved outputs to {}", out_path)
         logger.info("  - eval_metrics.json")
-        logger.info("  - {}", RUN_INFO_FILENAME)
+        logger.info("  - {}", out_path / pipeline_config.run_info_filename)
         logger.info("  - student_summary.csv ({} students)", len(summary_df))
         logger.info("  - step_trace.csv ({} rows)", len(trace_df))
         logger.info("  - item_difficulty.csv")
-        logger.info("  - {}", LOG_FILENAME)
+        logger.info("  - {}", log_filename)
         for metric_name, metric_value in sorted(artifacts.metrics.items()):
             logger.info("{}: {}", metric_name, metric_value)
     finally:

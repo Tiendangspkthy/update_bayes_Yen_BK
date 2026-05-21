@@ -384,6 +384,10 @@ class ColdStartSplitterConfig(BaseModel):
 
 
 class ColdStartPipelineConfig(BasePipelineConfig):
+    output_dir: Path = Path("outputs/cold_start")
+    log_filename: str = "pipeline.log"
+    run_info_filename: str = "run_info.json"
+
     cold_start_splitter: ColdStartSplitterConfig = ColdStartSplitterConfig()
     rasch_config: RaschModelConfig = RaschModelConfig()
     posterior_config: GridPosteriorConfig = GridPosteriorConfig()
